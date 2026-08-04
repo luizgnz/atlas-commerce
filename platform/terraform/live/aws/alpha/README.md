@@ -14,7 +14,7 @@ Terraform root module for the Atlas Commerce `alpha` (development) environment i
 
 ## State Backend
 
-Terraform state is stored remotely in the shared S3 backend:
+Terraform state is stored remotely in the S3 backend:
 
 ```text
 atlas-commerce/alpha/terraform.tfstate
