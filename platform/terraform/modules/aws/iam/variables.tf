@@ -11,14 +11,40 @@ variable "github_oidc_provider_arn" {
   type        = string
 }
 
+variable "github_repositories" {
+  description = <<-EOT
+    GitHub repositories allowed to assume these roles. `name` is "owner/repo".
+    `owner_id` and `repo_id` are the immutable GitHub numeric IDs used in the
+    OIDC `sub` claim (repo:owner@OWNER_ID/repo@REPO_ID:...). Both legacy and
+    immutable `sub` patterns are trusted when IDs are set.
+  EOT
+  type = list(object({
+    name     = string
+    owner_id = optional(string)
+    repo_id  = optional(string)
+  }))
+  default = [
+    {
+      name     = "Nitros64/atlas-commerce"
+      owner_id = "50177640"
+      repo_id  = "1230706878"
+    },
+    {
+      name     = "luizgnz/atlas-commerce"
+      owner_id = "101154230"
+      repo_id  = "1323178047"
+    },
+  ]
+}
+
 variable "github_organization" {
-  description = "GitHub organization or user that owns the repository."
+  description = "Deprecated. Use github_repositories. Kept for callers that still pass it."
   type        = string
   default     = "Nitros64"
 }
 
 variable "github_repository" {
-  description = "GitHub repository allowed to assume the AWS role."
+  description = "Deprecated. Use github_repositories. Kept for callers that still pass it."
   type        = string
   default     = "atlas-commerce"
 }
@@ -30,9 +56,9 @@ variable "github_branch" {
 }
 
 variable "additional_github_repositories" {
-  description = "Extra OWNER/REPO values trusted for OIDC (in addition to github_organization/github_repository). Defaults include the fork used for CI."
+  description = "Deprecated. Use github_repositories. Ignored when github_repositories default/list is used."
   type        = list(string)
-  default     = ["luizgnz/atlas-commerce"]
+  default     = []
 }
 
 variable "ecr_repository_arns" {
