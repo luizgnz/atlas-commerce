@@ -105,11 +105,11 @@ resource "aws_iam_role_policy" "plan_state_lock" {
 }
 
 # ---------------------------------------------------------------------------
-# Apply roles: one per Terraform live environment. Trust is restricted to
-# the `master` branch (no PR can assume these), and every write action is
-# denied unless a human has tagged the role `deploy-approved = true` first —
-# see policies/deploy-approval-gate.tf.tmpl for the tag mechanics and
-# scripts/approve-deploy.sh / revoke-deploy.sh for the operator commands.
+# Apply roles: one per Terraform live environment. Trust matches the GitHub
+# Environment OIDC subject (`environment:<name>`), because the apply job sets
+# `environment:` and GitHub mints that claim instead of `ref:refs/heads/...`.
+# Every write action is still denied unless a human tags the role
+# `deploy-approved = true` first — see scripts/approve-deploy.sh.
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "apply_trust" {
@@ -133,7 +133,7 @@ data "aws_iam_policy_document" "apply_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for prefix in local.github_repo_sub_prefixes : "${prefix}:${each.value.allowed_ref}"]
+      values   = [for prefix in local.github_repo_sub_prefixes : "${prefix}:${each.value.allowed_sub}"]
     }
   }
 }

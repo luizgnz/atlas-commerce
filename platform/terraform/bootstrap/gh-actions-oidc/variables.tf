@@ -39,20 +39,25 @@ variable "github_repositories" {
 
 variable "environments" {
   description = <<-EOT
-    Terraform live environments that get their own plan/apply IAM roles.
-    Keys are used in role names; values control which git refs may assume
-    the apply role for that environment. allowed_ref is matched with
-    StringLike, so "ref:refs/heads/*" allows any branch.
+    Terraform live environments that get their own apply IAM roles.
+    Keys are used in role names and must match the GitHub Environment name
+    on the apply job (reusable-terraform.yml sets environment: <key>).
+
+    allowed_sub is the OIDC subject suffix after "repo:OWNER/REPO:" (matched
+    with StringLike). Jobs that use a GitHub Environment mint
+    "environment:<name>" — NOT "ref:refs/heads/..." — so apply trust must
+    use environment:<key>. Plan jobs have no environment and still use
+    "repo:...:*" on the shared plan role.
   EOT
   type = map(object({
-    allowed_ref = string
+    allowed_sub = string
   }))
   default = {
-    bootstrap = { allowed_ref = "ref:refs/heads/master" }
+    bootstrap = { allowed_sub = "environment:bootstrap" }
     # alpha is currently the only live environment — no separate "shared"
-    # environment. It's a disposable test environment: any branch may apply
-    # to it, not just master, so it can be exercised without merging first.
-    alpha = { allowed_ref = "ref:refs/heads/*" }
+    # environment. Branch gating for alpha is left to the GitHub Environment
+    # reviewers + require-master=false on the workflow call.
+    alpha = { allowed_sub = "environment:alpha" }
   }
 }
 

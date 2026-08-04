@@ -12,7 +12,7 @@ Deploys `platform/terraform/live/aws/*` via `plan` on every PR and a gated `appl
 
 All three call the shared `reusable-terraform.yml`. `alpha` is currently the only live environment — it holds everything, including resources that would otherwise be split into a separate "shared" environment (e.g. the ECR repositories and their GitHub Actions push role). Add a `staging`/`prod` workflow the same way once those environments have real `.tf` files.
 
-`alpha` is a disposable test environment: both its IAM apply-role trust (`allowed_ref` in `bootstrap/gh-actions-oidc/variables.tf`) and its workflow (`require-master: false`) allow `apply` from any branch, not just `master`, so it can be exercised without merging first. The two approval gates below still apply regardless of branch. Any future `staging`/`prod` should keep the `master`-only restriction.
+`alpha` is a disposable test environment: its apply job uses the GitHub Environment `alpha` (OIDC `sub` …`:environment:alpha`, see `allowed_sub` in `bootstrap/gh-actions-oidc/variables.tf`) and `require-master: false`, so apply can run from any branch. The two approval gates below still apply regardless of branch. Any future `staging`/`prod` should keep a `master`-only restriction at the workflow and/or Environment level.
 
 ## One-time setup
 
