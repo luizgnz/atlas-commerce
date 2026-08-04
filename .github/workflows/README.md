@@ -36,19 +36,35 @@ There is **no** approval gate on deploy in v1 (Environment `alpha` has no requir
 
 # Terraform GitHub Actions Workflows
 
-Deploys `platform/terraform/live/aws/*` via `plan` on every PR and a gated `apply` on push, using OIDC — no long-lived AWS credentials in GitHub. See `platform/terraform/bootstrap/gh-actions-oidc/README.md` for the IAM side.
+Deploys `platform/terraform/live/aws/*` with OIDC — no long-lived AWS credentials in GitHub. See `platform/terraform/bootstrap/gh-actions-oidc/README.md` for the IAM side.
+
+## Live Alpha (manual only)
+
+Manual workflow: [`.github/workflows/terraform-live-alpha.yml`](terraform-live-alpha.yml).
+
+Same idea as **Deploy Services**: no `push` / `pull_request` triggers — only `workflow_dispatch`. GitHub registers `workflow_dispatch` from the **default branch** (`master`). Once this workflow file is on `master`, you can run it from **any branch** via the ref selector:
+
+1. Actions → **Terraform - Live Alpha** → **Run workflow** (pick the branch), or:
+
+```bash
+gh workflow run terraform-live-alpha.yml --ref <branch>
+```
+
+The run uses the selected ref’s code. Plan + gated apply still go through `reusable-terraform.yml` and GitHub Environment `alpha` (OIDC `…:environment:alpha`). The two approval gates below still apply.
+
+Bootstrap workflows (`terraform-bootstrap-*.yml`) still plan on PRs that touch their paths (or `reusable-terraform.yml`); they do not apply. If those PR plans become noisy, switch them to `workflow_dispatch` the same way.
 
 ## Workflows
 
-| File | Module | Apply? |
-|---|---|---|
-| `terraform-bootstrap-aws-backend.yml` | `bootstrap/aws-backend` | No — applied by hand, uses local state |
-| `terraform-bootstrap-gh-actions-oidc.yml` | `bootstrap/gh-actions-oidc` | No — applied by hand, security-sensitive |
-| `terraform-live-alpha.yml` | `live/aws/alpha` | Yes, gated, any branch |
+| File | Module | Apply? | Trigger |
+|---|---|---|---|
+| `terraform-bootstrap-aws-backend.yml` | `bootstrap/aws-backend` | No — applied by hand, uses local state | PR (path-filtered) |
+| `terraform-bootstrap-gh-actions-oidc.yml` | `bootstrap/gh-actions-oidc` | No — applied by hand, security-sensitive | PR (path-filtered) |
+| `terraform-live-alpha.yml` | `live/aws/alpha` | Yes, gated, any branch | Manual only (`workflow_dispatch`) |
 
 All three call the shared `reusable-terraform.yml`. `alpha` is currently the only live environment — it holds everything, including resources that would otherwise be split into a separate "shared" environment (e.g. the ECR repositories and their GitHub Actions push role). Add a `staging`/`prod` workflow the same way once those environments have real `.tf` files.
 
-`alpha` is a disposable test environment: its apply job uses the GitHub Environment `alpha` (OIDC `sub` …`:environment:alpha`, see `allowed_sub` in `bootstrap/gh-actions-oidc/variables.tf`) and `require-master: false`, so apply can run from any branch. The two approval gates below still apply regardless of branch. Any future `staging`/`prod` should keep a `master`-only restriction at the workflow and/or Environment level.
+`alpha` is a disposable test environment: its apply job uses the GitHub Environment `alpha` (OIDC `sub` …`:environment:alpha`, see `allowed_sub` in `bootstrap/gh-actions-oidc/variables.tf`) and `require-master: false`, so apply can run from any branch when you dispatch the workflow. The two approval gates below still apply regardless of branch. Any future `staging`/`prod` should keep a `master`-only restriction at the workflow and/or Environment level.
 
 ## One-time setup
 
@@ -86,4 +102,4 @@ Then approve the pending `apply` job in the GitHub UI. Once the run finishes:
 
 ## Why plan never needs approval
 
-The `plan` role only has `ReadOnlyAccess` and is assumable from any ref of this repo (scoped to `repo:Nitros64/atlas-commerce:*`). It cannot create, modify, or delete anything, so it runs unattended on every PR to give reviewers a real plan diff in the PR comments.
+The `plan` role only has `ReadOnlyAccess` and is assumable from any ref of this repo (scoped to `repo:Nitros64/atlas-commerce:*`). It cannot create, modify, or delete anything. Bootstrap workflows still run plan on matching PRs; Live Alpha plan/apply only runs when you dispatch the workflow.

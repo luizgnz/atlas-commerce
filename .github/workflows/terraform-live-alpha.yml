@@ -1,23 +1,11 @@
 name: Terraform - Live Alpha
 
 on:
-  push:
-    paths:
-      - "platform/terraform/live/aws/alpha/**"
-      - "platform/terraform/modules/**"
-      - ".github/workflows/reusable-terraform.yml"
-      - ".github/workflows/terraform-live-alpha.yml"
-  pull_request:
-    branches: [master]
-    paths:
-      - "platform/terraform/live/aws/alpha/**"
-      - "platform/terraform/modules/**"
-      - ".github/workflows/reusable-terraform.yml"
-      - ".github/workflows/terraform-live-alpha.yml"
+  workflow_dispatch:
 
 concurrency:
   group: terraform-live-alpha-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   terraform:
