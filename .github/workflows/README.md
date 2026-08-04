@@ -36,19 +36,35 @@ There is **no** approval gate on deploy in v1 (Environment `alpha` has no requir
 
 # Terraform GitHub Actions Workflows
 
-Deploys `platform/terraform/live/aws/*` via `plan` on every PR and a gated `apply` on push, using OIDC — no long-lived AWS credentials in GitHub. See `platform/terraform/bootstrap/gh-actions-oidc/README.md` for the IAM side.
+Deploys `platform/terraform/live/aws/*` with OIDC — no long-lived AWS credentials in GitHub. See `platform/terraform/bootstrap/gh-actions-oidc/README.md` for the IAM side.
+
+## Live Alpha (manual only)
+
+Manual workflow: [`.github/workflows/terraform-live-alpha.yml`](terraform-live-alpha.yml).
+
+Same idea as **Deploy Services**: no `push` / `pull_request` triggers — only `workflow_dispatch`. GitHub registers `workflow_dispatch` from the **default branch** (`master`). Once this workflow file is on `master`, you can run it from **any branch** via the ref selector:
+
+1. Actions → **Terraform - Live Alpha** → **Run workflow** (pick the branch), or:
+
+```bash
+gh workflow run terraform-live-alpha.yml --ref <branch>
+```
+
+The run uses the selected ref’s code. Plan + apply go through `reusable-terraform.yml` and GitHub Environment `alpha` (kept for OIDC `…:environment:alpha`). **Until alpha is functional, leave Environment `alpha` with no required reviewers** (Settings → Environments → alpha) and keep the AWS `deploy-approved` gate off for alpha (`require_deploy_approval = false` in `bootstrap/gh-actions-oidc`).
+
+Bootstrap workflows (`terraform-bootstrap-*.yml`) still plan on PRs that touch their paths (or `reusable-terraform.yml`); they do not apply. If those PR plans become noisy, switch them to `workflow_dispatch` the same way.
 
 ## Workflows
 
-| File | Module | Apply? |
-|---|---|---|
-| `terraform-bootstrap-aws-backend.yml` | `bootstrap/aws-backend` | No — applied by hand, uses local state |
-| `terraform-bootstrap-gh-actions-oidc.yml` | `bootstrap/gh-actions-oidc` | No — applied by hand, security-sensitive |
-| `terraform-live-alpha.yml` | `live/aws/alpha` | Yes, gated, any branch |
+| File | Module | Apply? | Trigger |
+|---|---|---|---|
+| `terraform-bootstrap-aws-backend.yml` | `bootstrap/aws-backend` | No — applied by hand, uses local state | PR (path-filtered) |
+| `terraform-bootstrap-gh-actions-oidc.yml` | `bootstrap/gh-actions-oidc` | No — applied by hand, security-sensitive | PR (path-filtered) |
+| `terraform-live-alpha.yml` | `live/aws/alpha` | Yes (ungated while stacking up), any branch | Manual only (`workflow_dispatch`) |
 
 All three call the shared `reusable-terraform.yml`. `alpha` is currently the only live environment — it holds everything, including resources that would otherwise be split into a separate "shared" environment (e.g. the ECR repositories and their GitHub Actions push role). Add a `staging`/`prod` workflow the same way once those environments have real `.tf` files.
 
-`alpha` is a disposable test environment: its apply job uses the GitHub Environment `alpha` (OIDC `sub` …`:environment:alpha`, see `allowed_sub` in `bootstrap/gh-actions-oidc/variables.tf`) and `require-master: false`, so apply can run from any branch. The two approval gates below still apply regardless of branch. Any future `staging`/`prod` should keep a `master`-only restriction at the workflow and/or Environment level.
+`alpha` is a disposable test environment: its apply job uses the GitHub Environment `alpha` (OIDC `sub` …`:environment:alpha`) and `require-master: false`, so apply can run from any branch when you dispatch the workflow. Approvals are temporarily off for alpha (no Environment reviewers; IAM deny gate disabled via `require_deploy_approval = false`). Re-enable both once the stack is functional. Any future `staging`/`prod` should keep approvals and a `master`-only restriction.
 
 ## One-time setup
 
@@ -64,26 +80,23 @@ All three call the shared `reusable-terraform.yml`. `alpha` is currently the onl
    | `TERRAFORM_PLAN_ROLE_ARN` | output `plan_role_arn` from `bootstrap/gh-actions-oidc` |
 
 4. Create a **GitHub Environment** per deployable Terraform env (`alpha`, and later `staging`/`prod`) under `Settings → Environments`:
-   - Add **required reviewers** — this is the GitHub-side approval gate (pauses the `apply` job for your sign-off).
-   - Add an environment-scoped variable `TERRAFORM_APPLY_ROLE_ARN` with that environment's ARN from `apply_role_arns` in the `bootstrap/gh-actions-oidc` output.
+   - **alpha (temporary):** leave **required reviewers empty** so `workflow_dispatch` apply does not pause. Code cannot clear reviewers — do it in the GitHub UI if any are set.
+   - Later / staging/prod: add required reviewers when you want a human sign-off.
+   - Apply role ARNs come from `environments.yml` via the reusable workflow `config` job (no environment-scoped variables required).
 
-## Approving a real deploy
+## Approving a real deploy (staging/prod, or alpha after re-enabling gates)
 
-A GitHub Environment approval alone is not enough — the apply IAM role denies every write call in AWS until a human separately tags it. Two independent gates, one in GitHub, one in AWS:
+When `require_deploy_approval = true` for an env, the apply IAM role denies every write until a human tags it. Open/close the AWS-side gate:
 
 ```bash
 cd platform/terraform/bootstrap/gh-actions-oidc
-./scripts/approve-deploy.sh alpha    # opens the AWS-side gate for alpha
+./scripts/approve-deploy.sh <env>    # opens the AWS-side gate
+# … run / approve the apply job …
+./scripts/revoke-deploy.sh <env>     # closes the AWS-side gate again
 ```
 
-Then approve the pending `apply` job in the GitHub UI. Once the run finishes:
-
-```bash
-./scripts/revoke-deploy.sh alpha     # closes the AWS-side gate again
-```
-
-`./scripts/status-deploy.sh` shows which environments are currently open.
+`./scripts/status-deploy.sh` shows which environments are currently open. **Alpha currently has this gate disabled in Terraform** (`require_deploy_approval = false`); re-apply `bootstrap/gh-actions-oidc` after flipping that flag to restore the deny policy. Until you re-apply, leaving `deploy-approved=true` on the alpha apply role also keeps writes allowed.
 
 ## Why plan never needs approval
 
-The `plan` role only has `ReadOnlyAccess` and is assumable from any ref of this repo (scoped to `repo:Nitros64/atlas-commerce:*`). It cannot create, modify, or delete anything, so it runs unattended on every PR to give reviewers a real plan diff in the PR comments.
+The `plan` role only has `ReadOnlyAccess` and is assumable from any ref of this repo (scoped to `repo:Nitros64/atlas-commerce:*`). It cannot create, modify, or delete anything. Bootstrap workflows still run plan on matching PRs; Live Alpha plan/apply only runs when you dispatch the workflow.

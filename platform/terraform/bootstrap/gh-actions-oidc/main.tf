@@ -108,8 +108,10 @@ resource "aws_iam_role_policy" "plan_state_lock" {
 # Apply roles: one per Terraform live environment. Trust matches the GitHub
 # Environment OIDC subject (`environment:<name>`), because the apply job sets
 # `environment:` and GitHub mints that claim instead of `ref:refs/heads/...`.
-# Every write action is still denied unless a human tags the role
-# `deploy-approved = true` first — see scripts/approve-deploy.sh.
+# When require_deploy_approval is true (default), every write action is denied
+# unless a human tags the role `deploy-approved = true` first — see
+# scripts/approve-deploy.sh. Alpha currently sets require_deploy_approval=false
+# so CI can apply while the stack is being brought up.
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "apply_trust" {
@@ -157,7 +159,10 @@ resource "aws_iam_role_policy_attachment" "apply_admin" {
 }
 
 resource "aws_iam_role_policy" "apply_requires_human_approval" {
-  for_each = var.environments
+  for_each = {
+    for name, cfg in var.environments : name => cfg
+    if try(cfg.require_deploy_approval, true)
+  }
 
   name   = "requires-human-approval"
   role   = aws_iam_role.apply[each.key].name

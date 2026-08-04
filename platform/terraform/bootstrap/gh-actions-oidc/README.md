@@ -10,9 +10,11 @@ Resources:
 
 ## The human approval gate
 
-Every apply role is denied all mutating AWS calls by default, regardless of what IAM permissions it's attached — the deny is unconditional except for one thing: the role must carry the `deploy-approved = true` tag on itself. GitHub Actions has no permission to set that tag. Only a human operator with IAM tagging rights on this account can.
+When `require_deploy_approval = true` for an environment (default), that apply role is denied all mutating AWS calls unless it carries the `deploy-approved = true` tag. GitHub Actions has no permission to set that tag. Only a human operator with IAM tagging rights on this account can.
 
-This means an `apply` job can start, authenticate, and even run `terraform plan` as its own first step, but every create/update/delete call fails with `AccessDenied` until you explicitly approve that specific run.
+**Alpha currently sets `require_deploy_approval = false`** so Live Alpha apply can write without `approve-deploy.sh` while the stack is brought up. Re-enable the flag and re-apply this module once alpha is functional.
+
+For gated envs, an `apply` job can start and authenticate, but every create/update/delete call fails with `AccessDenied` until you explicitly approve that run.
 
 ### Approving a deploy
 

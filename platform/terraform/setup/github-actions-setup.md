@@ -30,26 +30,27 @@ no separate `shared` environment; ECR repositories and their GitHub Actions
 push role live inside `alpha` too.
 
 ### `alpha`
-- Required reviewers: add at least one human reviewer.
+- Required reviewers: **leave empty** until the stack is functional (reviewers
+  pause every job that uses `environment: alpha`, including Deploy Services).
+  Code cannot clear reviewers — remove them in Settings → Environments → alpha
+  if any are configured.
 - No environment variables needed — `TERRAFORM_APPLY_ROLE_ARN` comes from
   `environments.yml` via the `config` job.
 - Deployment branches: no restriction — `alpha` is a disposable test
   environment, its AWS-side trust policy already allows any branch
   (`require-master: false` in `terraform-live-alpha.yml`).
+- AWS IAM deny-until-approved gate is off for alpha
+  (`require_deploy_approval = false` in `bootstrap/gh-actions-oidc`).
 
 Add `staging`/`prod` the same way once those environments have real `.tf`
-files and their own entry in `environments.yml`.
+files and their own entry in `environments.yml` (with approvals enabled).
 
 ## 3. Verify
 
-Open a PR that touches `platform/terraform/live/aws/alpha/**` and confirm
-the `plan` job runs and comments the Terraform plan on the PR. Then merge
-(or push to any branch, for `alpha`) and confirm the `apply` job pauses for
-environment approval.
-
-To actually let `apply` write to AWS, a human must also open the AWS-side
-gate — see `bootstrap/gh-actions-oidc/README.md` (`scripts/approve-deploy.sh` /
-`scripts/revoke-deploy.sh`).
+Dispatch **Terraform - Live Alpha** from Actions (or
+`gh workflow run terraform-live-alpha.yml --ref master`) and confirm plan +
+apply both run without waiting for a reviewer. After re-enabling gates, apply
+will pause on Environment reviewers and/or need `approve-deploy.sh`.
 
 ## 4. Rotate the exposed credential
 

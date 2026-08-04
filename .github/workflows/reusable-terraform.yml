@@ -46,8 +46,9 @@ on:
           Whether the apply job requires github.ref to be refs/heads/master.
           False only for disposable test environments (e.g. alpha) whose IAM
           apply-role trust already allows any branch — apply then runs on
-          push to any branch, still gated by the GitHub Environment reviewer
-          and the AWS-side deploy-approved tag.
+          push or workflow_dispatch from any branch. GitHub Environment
+          reviewers and the AWS deploy-approved tag are optional gates
+          (alpha has both disabled while bringing the stack up).
         required: false
         type: boolean
         default: true
@@ -191,7 +192,7 @@ jobs:
         run: exit 1
 
       - name: Upload plan artifact
-        if: inputs.apply-enabled && github.event_name == 'push'
+        if: inputs.apply-enabled && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ inputs.environment-name }}
@@ -201,12 +202,16 @@ jobs:
   apply:
     name: Apply (${{ inputs.environment-name }})
     needs: [config, plan]
-    if: inputs.apply-enabled && github.event_name == 'push' && (!inputs.require-master || github.ref == 'refs/heads/master')
+    if: >
+      inputs.apply-enabled
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (!inputs.require-master || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
-    # Pauses here for manual approval — configure required reviewers on this
-    # GitHub Environment. Even after approval, every write call is still
-    # denied in AWS until a human runs scripts/approve-deploy.sh — see
-    # platform/terraform/bootstrap/gh-actions-oidc/README.md.
+    # Kept for OIDC (sub …:environment:<name>). If this Environment has
+    # required reviewers in GitHub Settings, the job pauses — leave alpha
+    # with zero reviewers until the stack is functional. AWS-side
+    # deploy-approved gate is controlled per-env in bootstrap/gh-actions-oidc
+    # (alpha: require_deploy_approval=false for now).
     environment: ${{ inputs.environment-name }}
     defaults:
       run:
@@ -237,11 +242,9 @@ jobs:
           use_lockfile = true
           EOF
 
-      # The apply role denies all write actions unless a human has tagged it
-      # deploy-approved=true out-of-band (scripts/approve-deploy.sh). This
-      # credentials step succeeds regardless; the AWS API calls in `apply`
-      # below are what actually gets denied without that tag.
-      - name: Configure AWS credentials (apply role, gated in AWS)
+      # Apply role may still deny writes when require_deploy_approval=true
+      # (scripts/approve-deploy.sh). Alpha currently skips that IAM deny.
+      - name: Configure AWS credentials (apply role)
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ needs.config.outputs.aws-region }}
