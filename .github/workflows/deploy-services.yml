@@ -219,15 +219,19 @@ jobs:
           RELEASE_NAME="atlas"
           NAMESPACE="atlas"
           REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          PREFIX="${ECR_REPOSITORY_PREFIX:-atlas-commerce}"
+          PREFIX="${PREFIX#/}"
+          PREFIX="${PREFIX%/}"
 
           echo "Deploying selected services: ${SELECTED}"
           echo "Image tag: ${IMAGE_TAG}"
+          echo "ECR prefix: ${PREFIX}"
 
           SET_ARGS=()
           while IFS= read -r row; do
             helm_key=$(jq -r '.helm_key' <<< "$row")
             docker_image=$(jq -r '.docker_image_name' <<< "$row")
-            repository="${REGISTRY}/${ECR_REPOSITORY_PREFIX}/${docker_image}"
+            repository="${REGISTRY}/${PREFIX}/${docker_image}"
             SET_ARGS+=(
               --set "${helm_key}.deployment.image.repository=${repository}"
               --set "${helm_key}.deployment.image.tag=${IMAGE_TAG}"

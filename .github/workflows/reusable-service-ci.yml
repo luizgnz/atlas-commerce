@@ -155,6 +155,21 @@ jobs:
         if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || inputs.force-ecr-push
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Resolve ECR image repository
+        id: ecr_image
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || inputs.force-ecr-push
+        env:
+          ECR_PREFIX: ${{ vars.ECR_REPOSITORY_PREFIX }}
+          REGISTRY: ${{ steps.login_ecr.outputs.registry }}
+          IMAGE_NAME: ${{ inputs.docker-image-name }}
+        run: |
+          set -euo pipefail
+          prefix="${ECR_PREFIX:-atlas-commerce}"
+          prefix="${prefix#/}"
+          prefix="${prefix%/}"
+          echo "repository=${REGISTRY}/${prefix}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker Image to Amazon ECR
         if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || inputs.force-ecr-push
         uses: docker/build-push-action@v6
@@ -163,7 +178,7 @@ jobs:
           file: ${{ inputs.service-path }}/Dockerfile
           push: true
           tags: |
-            ${{ steps.login_ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY_PREFIX }}/${{ inputs.docker-image-name }}:sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+            ${{ steps.ecr_image.outputs.repository }}:${{ steps.ecr_image.outputs.tag }}
 
       # ==================== TESTING ====================
       - name: Test Report
