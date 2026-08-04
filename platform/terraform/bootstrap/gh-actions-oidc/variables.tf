@@ -61,3 +61,9 @@ variable "deploy_approval_tag_key" {
   type        = string
   default     = "deploy-approved"
 }
+
+variable "terraform_state_bucket" {
+  description = "S3 bucket holding Terraform remote state. The plan role needs write access only for native S3 lockfiles (*.tflock); state objects stay read-only via ReadOnlyAccess."
+  type        = string
+  default     = "atlas-commerce-shared-tfstate-553337000139-eu-central-1"
+}

@@ -58,6 +58,52 @@ resource "aws_iam_role_policy_attachment" "plan_read_only" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
+# terraform plan with use_lockfile=true must PutObject/DeleteObject the
+# `.tflock` companion object. ReadOnlyAccess covers state reads but not
+# lock writes, so grant the narrowest write scope that still lets plan run.
+data "aws_iam_policy_document" "plan_state_lock" {
+  statement {
+    sid    = "ListTerraformStateBucket"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+    ]
+    resources = [
+      "arn:aws:s3:::${var.terraform_state_bucket}",
+    ]
+  }
+
+  statement {
+    sid    = "ReadTerraformStateObjects"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+    ]
+    resources = [
+      "arn:aws:s3:::${var.terraform_state_bucket}/*",
+    ]
+  }
+
+  statement {
+    sid    = "WriteTerraformStateLockfiles"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = [
+      "arn:aws:s3:::${var.terraform_state_bucket}/*.tflock",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "plan_state_lock" {
+  name   = "terraform-state-lock"
+  role   = aws_iam_role.plan.name
+  policy = data.aws_iam_policy_document.plan_state_lock.json
+}
+
 # ---------------------------------------------------------------------------
 # Apply roles: one per Terraform live environment. Trust is restricted to
 # the `master` branch (no PR can assume these), and every write action is
