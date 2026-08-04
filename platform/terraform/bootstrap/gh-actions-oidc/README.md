@@ -43,6 +43,8 @@ A GitHub Environment approval is a gate inside GitHub — if the repo, the OIDC 
 cd platform/terraform/bootstrap/gh-actions-oidc
 
 cp terraform.tfvars.example terraform.tfvars
+# Fill owner_id / repo_id per repo (immutable OIDC sub claims):
+#   gh api repos/OWNER/REPO --jq '{owner_id:.owner.id,repo_id:.id}'
 
 # Generate backend.hcl from the aws-backend bootstrap's own state:
 cd ../aws-backend && ./generate-backend-hcl.sh bootstrap/gh-actions-oidc && cd -
@@ -53,5 +55,9 @@ terraform validate
 terraform plan -out tfplan
 terraform apply tfplan
 ```
+
+Trust accepts both GitHub OIDC `sub` formats (legacy `repo:OWNER/REPO:...` and
+immutable `repo:OWNER@OWNER_ID/REPO@REPO_ID:...`). Without the numeric IDs,
+repos on the immutable format get `AccessDenied` on `AssumeRoleWithWebIdentity`.
 
 After applying, feed `apply_role_arns` and `plan_role_arn` into the repo's GitHub Actions secrets/variables — see `.github/workflows/README.md`.

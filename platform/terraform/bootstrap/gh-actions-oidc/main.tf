@@ -43,7 +43,7 @@ data "aws_iam_policy_document" "plan_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for repo in var.github_repositories : "repo:${repo}:*"]
+      values   = [for prefix in local.github_repo_sub_prefixes : "${prefix}:*"]
     }
   }
 }
@@ -87,7 +87,7 @@ data "aws_iam_policy_document" "apply_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for repo in var.github_repositories : "repo:${repo}:${each.value.allowed_ref}"]
+      values   = [for prefix in local.github_repo_sub_prefixes : "${prefix}:${each.value.allowed_ref}"]
     }
   }
 }

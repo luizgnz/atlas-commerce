@@ -10,6 +10,6 @@ module "secrets_manager" {
     "platform"
   ]
 
-  additional_tags = var.additional_tags
+  additional_tags         = var.additional_tags
   recovery_window_in_days = 0
 }

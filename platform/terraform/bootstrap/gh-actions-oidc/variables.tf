@@ -11,9 +11,30 @@ variable "aws_region" {
 }
 
 variable "github_repositories" {
-  description = "GitHub repositories allowed to assume these roles, each in \"owner/repo\" form. Includes the upstream repo and any fork CI runs from."
-  type        = list(string)
-  default     = ["Nitros64/atlas-commerce", "luizgnz/atlas-commerce"]
+  description = <<-EOT
+    GitHub repositories allowed to assume these roles. `name` is "owner/repo".
+    `owner_id` and `repo_id` are the immutable GitHub numeric IDs used in the
+    OIDC `sub` claim for repos created/opted-in after GitHub's immutable
+    subject claim rollout (e.g. repo:owner@OWNER_ID/repo@REPO_ID:...).
+    Both legacy and immutable `sub` patterns are trusted when IDs are set.
+  EOT
+  type = list(object({
+    name     = string
+    owner_id = optional(string)
+    repo_id  = optional(string)
+  }))
+  default = [
+    {
+      name     = "Nitros64/atlas-commerce"
+      owner_id = "50177640"
+      repo_id  = "1230706878"
+    },
+    {
+      name     = "luizgnz/atlas-commerce"
+      owner_id = "101154230"
+      repo_id  = "1323178047"
+    },
+  ]
 }
 
 variable "environments" {
