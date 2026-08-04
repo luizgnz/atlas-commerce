@@ -48,16 +48,25 @@ variable "environments" {
     "environment:<name>" — NOT "ref:refs/heads/..." — so apply trust must
     use environment:<key>. Plan jobs have no environment and still use
     "repo:...:*" on the shared plan role.
+
+    require_deploy_approval (default true) attaches the IAM deny-until-tagged
+    gate (deploy-approved). Set false for disposable envs (alpha) while the
+    stack is being brought up so apply can run without approve-deploy.sh.
   EOT
   type = map(object({
-    allowed_sub = string
+    allowed_sub               = string
+    require_deploy_approval   = optional(bool, true)
   }))
   default = {
     bootstrap = { allowed_sub = "environment:bootstrap" }
     # alpha is currently the only live environment — no separate "shared"
-    # environment. Branch gating for alpha is left to the GitHub Environment
-    # reviewers + require-master=false on the workflow call.
-    alpha = { allowed_sub = "environment:alpha" }
+    # environment. Approval gate off until the stack is functional; re-enable
+    # require_deploy_approval later. Keep GitHub Environment reviewers empty
+    # for alpha as well (Settings → Environments → alpha).
+    alpha = {
+      allowed_sub             = "environment:alpha"
+      require_deploy_approval = false
+    }
   }
 }
 
