@@ -1,16 +1,8 @@
 name: Pricing Service CI
 
 on:
-  push:
-    branches: [master, main, develop]
-    paths:
-      - "services/pricing-service/**"
-      - ".github/workflows/reusable-service-ci.yml"
-  pull_request:
-    branches: [master, main, develop]
-    paths:
-      - "services/pricing-service/**"
-      - ".github/workflows/reusable-service-ci.yml"
+  workflow_dispatch:
+
 
 permissions:
   contents: read

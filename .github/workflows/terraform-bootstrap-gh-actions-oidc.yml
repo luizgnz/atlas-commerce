@@ -2,14 +2,10 @@ name: Terraform - Bootstrap GH Actions OIDC (plan only)
 
 # This module creates the IAM roles other Terraform workflows assume, and
 # changes here are rare and security-sensitive — applied by hand, see its
-# README. CI only runs plan/validate as a PR check, never an automated apply.
+# README. CI only runs plan/validate when dispatched manually, never an automated apply.
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - "platform/terraform/bootstrap/gh-actions-oidc/**"
-      - ".github/workflows/reusable-terraform.yml"
-      - ".github/workflows/terraform-bootstrap-gh-actions-oidc.yml"
+  workflow_dispatch:
+
 
 concurrency:
   group: terraform-bootstrap-gh-actions-oidc-${{ github.ref }}

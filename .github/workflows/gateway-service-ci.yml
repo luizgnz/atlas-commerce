@@ -1,18 +1,8 @@
 name: Gateway Service CI
 
 on:
-  push:
-    branches: [master, main, develop]
-    paths:
-      - "services/gateway-service/**"
-      - ".github/workflows/reusable-service-ci.yml"
-      - ".github/workflows/gateway-service-ci.yml"
-  pull_request:
-    branches: [master, main, develop]
-    paths:
-      - "services/gateway-service/**"
-      - ".github/workflows/reusable-service-ci.yml"
-      - ".github/workflows/gateway-service-ci.yml"
+  workflow_dispatch:
+
 
 permissions:
   contents: read
