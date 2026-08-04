@@ -28,6 +28,7 @@ module "github_actions_iam" {
 
   github_oidc_provider_arn = var.github_oidc_provider_arn
   ecr_repository_arns      = values(module.ecr.repository_arns)
+  create_eks_deploy_role   = true
   eks_cluster_arn          = module.eks.cluster_arn
 
   additional_tags = var.additional_tags

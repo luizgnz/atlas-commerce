@@ -26,7 +26,9 @@ locals {
     ]
   ])
 
-  create_eks_deploy_role = var.eks_cluster_arn != null
+  # Do not derive this from eks_cluster_arn != null — that ARN is often
+  # (known after apply) and breaks count during plan/targeted apply.
+  create_eks_deploy_role = var.create_eks_deploy_role
 
   common_tags = merge(
     {

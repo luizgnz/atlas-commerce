@@ -72,8 +72,14 @@ variable "role_name" {
   default     = "atlas-commerce-github-actions-ecr-push-role"
 }
 
+variable "create_eks_deploy_role" {
+  description = "When true, create the GitHub Actions EKS deploy role. Must be a literal bool (not derived from a computed ARN) so count is known at plan time."
+  type        = bool
+  default     = false
+}
+
 variable "eks_cluster_arn" {
-  description = "EKS cluster ARN the deploy role may DescribeCluster. When null, the EKS deploy role is not created."
+  description = "EKS cluster ARN the deploy role may DescribeCluster. Required when create_eks_deploy_role is true."
   type        = string
   default     = null
 }
