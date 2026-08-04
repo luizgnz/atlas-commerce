@@ -6,7 +6,8 @@
 data "http" "operator_public_ip" {
   count = length(var.eks_cluster_endpoint_public_access_cidrs) == 0 ? 1 : 0
 
-  url = "https://checkip.amazonaws.com"
+  url                = "https://checkip.amazonaws.com"
+  request_timeout_ms = 10000
 }
 
 locals {

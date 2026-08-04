@@ -23,17 +23,32 @@ private_subnet_cidrs = [
   "10.20.32.0/20"
 ]
 
-# Keep NAT disabled in alpha to avoid its hourly AWS cost.
-enable_nat_gateway = false
+# Enabled: EKS node group nodes live in private subnets and need outbound
+# internet access to pull kubelet/CNI images and register with the cluster.
+enable_nat_gateway = true
 
 # Add environment-specific resource tags.
 additional_tags = {
   Purpose = "development"
 }
 
-# GitHub Actions OIDC provider created by bootstrap/gh-actions-oidc
-# (output oidc_provider_arn). Reused here for the ECR push role.
-github_oidc_provider_arn = "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+# EKS cluster configuration.
+eks_kubernetes_version = "1.35"
+
+# Pin explicitly so CI does not hang on data.http → checkip.amazonaws.com
+# (see locals.tf). Alpha is disposable; open API access is acceptable here.
+eks_cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
+eks_node_instance_types = ["t3.medium"]
+
+# RDS PostgreSQL configuration.
+rds_engine_version = "17.10"
+
+# ElastiCache Redis configuration.
+redis_engine_version = "7.1"
+
+# GitHub Actions OIDC provider created by bootstrap/gh-actions-oidc.
+github_oidc_provider_arn = "arn:aws:iam::553337000139:oidc-provider/token.actions.githubusercontent.com"
 
 # ECR repositories for Atlas Commerce container images.
 repository_prefix = "atlas-commerce"

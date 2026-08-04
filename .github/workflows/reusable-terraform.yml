@@ -148,6 +148,16 @@ jobs:
         if: ${{ !inputs.uses-remote-backend }}
         run: terraform init
 
+      # terraform.tfvars is gitignored (may contain account-specific values).
+      # CI uses the committed example so plan is non-interactive and does not
+      # hang waiting for stdin on required variables.
+      - name: Materialize terraform.tfvars for CI
+        run: |
+          if [ ! -f terraform.tfvars ] && [ -f terraform.tfvars.example ]; then
+            cp terraform.tfvars.example terraform.tfvars
+            echo "Using terraform.tfvars.example as terraform.tfvars"
+          fi
+
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
@@ -156,7 +166,7 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -out=tfplan
+        run: terraform plan -input=false -no-color -out=tfplan
         continue-on-error: true
 
       - name: Comment plan on pull request
