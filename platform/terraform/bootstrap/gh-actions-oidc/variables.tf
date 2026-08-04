@@ -10,10 +10,10 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
-variable "github_repository" {
-  description = "GitHub repository allowed to assume these roles, in \"owner/repo\" form."
-  type        = string
-  default     = "Nitros64/atlas-commerce"
+variable "github_repositories" {
+  description = "GitHub repositories allowed to assume these roles, each in \"owner/repo\" form. Includes the upstream repo and any fork CI runs from."
+  type        = list(string)
+  default     = ["Nitros64/atlas-commerce", "luizgnz/atlas-commerce"]
 }
 
 variable "environments" {
