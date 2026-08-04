@@ -89,13 +89,14 @@ Manual workflow: [`.github/workflows/terraform-destroy-alpha.yml`](terraform-des
 Runs `terraform destroy` on `live/aws/alpha`. Requires:
 
 1. `confirm=destroy-alpha` on `workflow_dispatch`
-2. **GitHub Environment `alpha-destroy`** with required reviewers (approval gate). Deploy/apply keep using Environment `alpha` without reviewers.
+2. **Approve** Environment `alpha-destroy` (required reviewers)
+3. Then destroy (Environment `alpha` for OIDC): targeted apply to set ECR `force_delete = true`, then `terraform destroy`
 
-After approval, destroy assumes the Terraform apply IAM role via Environment `alpha` (OIDC). Irreversible for that environment’s AWS resources (EKS, RDS, Redis, ECR repos, etc.).
+Non-empty ECR repos are removed via `force_delete` on `aws_ecr_repository` (no manual image purge). Deploy/apply keep using Environment `alpha` without reviewers.
 
 ```bash
 gh workflow run terraform-destroy-alpha.yml --ref master -f confirm=destroy-alpha
-# then approve the pending deployment for Environment alpha-destroy in the GitHub UI
+# then approve the pending deployment for Environment alpha-destroy
 ```
 
 ## Live Alpha (manual only)

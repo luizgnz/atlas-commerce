@@ -18,6 +18,9 @@ resource "aws_ecr_repository" "this" {
     encryption_type = "AES256"
   }
 
+  # Allow terraform destroy when the repo still has images (alpha / CI tags).
+  force_delete = true
+
   tags = merge(
     local.common_tags,
     {

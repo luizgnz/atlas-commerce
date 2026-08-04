@@ -1,9 +1,8 @@
 # Manual destroy of live/aws/alpha. Irreversible for that environment's AWS resources.
 #
-# Approval gate: job `gate` uses GitHub Environment `alpha-destroy` (required
-# reviewers). Destroy itself uses Environment `alpha` so the Terraform apply
-# IAM role OIDC trust (environment:alpha) still works. Deploy/apply stay on
-# Environment `alpha` without reviewers.
+# Flow:
+# 1) gate — Environment alpha-destroy (required reviewers)
+# 2) destroy — Environment alpha (OIDC): sync ECR force_delete, then terraform destroy
 name: Terraform - Destroy Alpha
 
 on:
@@ -24,21 +23,19 @@ permissions:
 
 jobs:
   gate:
-    name: Approval gate (alpha-destroy)
+    name: Approval gate
     if: inputs.confirm == 'destroy-alpha'
     runs-on: ubuntu-latest
-    # Pauses here until a required reviewer approves on Environment alpha-destroy.
     environment: alpha-destroy
     steps:
       - name: Confirmed
-        run: echo "Destroy of live/aws/alpha approved via Environment alpha-destroy."
+        run: echo "Destroy approved. Proceeding to terraform destroy (ECR force_delete)."
 
   destroy:
     name: Destroy alpha
     needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # OIDC apply role trusts environment:alpha (not alpha-destroy).
     environment: alpha
     defaults:
       run:
@@ -101,6 +98,12 @@ jobs:
             cp terraform.tfvars.example terraform.tfvars
             echo "Using terraform.tfvars.example as terraform.tfvars"
           fi
+
+      # force_delete is read from state on destroy; sync it before deleting repos with images.
+      - name: Enable ECR force_delete in state
+        run: |
+          terraform apply -input=false -auto-approve \
+            -target=module.ecr.aws_ecr_repository.this
 
       - name: Terraform Destroy
         run: terraform destroy -input=false -auto-approve
