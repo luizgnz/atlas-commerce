@@ -1,4 +1,9 @@
 # Manual destroy of live/aws/alpha. Irreversible for that environment's AWS resources.
+#
+# Approval gate: job `gate` uses GitHub Environment `alpha-destroy` (required
+# reviewers). Destroy itself uses Environment `alpha` so the Terraform apply
+# IAM role OIDC trust (environment:alpha) still works. Deploy/apply stay on
+# Environment `alpha` without reviewers.
 name: Terraform - Destroy Alpha
 
 on:
@@ -18,11 +23,22 @@ permissions:
   id-token: write
 
 jobs:
-  destroy:
-    name: Destroy alpha
+  gate:
+    name: Approval gate (alpha-destroy)
     if: inputs.confirm == 'destroy-alpha'
     runs-on: ubuntu-latest
+    # Pauses here until a required reviewer approves on Environment alpha-destroy.
+    environment: alpha-destroy
+    steps:
+      - name: Confirmed
+        run: echo "Destroy of live/aws/alpha approved via Environment alpha-destroy."
+
+  destroy:
+    name: Destroy alpha
+    needs: gate
+    runs-on: ubuntu-latest
     timeout-minutes: 120
+    # OIDC apply role trusts environment:alpha (not alpha-destroy).
     environment: alpha
     defaults:
       run:

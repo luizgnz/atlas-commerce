@@ -86,10 +86,16 @@ All Terraform entrypoints are **manual only** (`workflow_dispatch`), including b
 
 Manual workflow: [`.github/workflows/terraform-destroy-alpha.yml`](terraform-destroy-alpha.yml).
 
-Runs `terraform destroy` on `live/aws/alpha`. Requires `confirm=destroy-alpha` on `workflow_dispatch`. Uses GitHub Environment `alpha` and the Terraform apply IAM role. Irreversible for that environment’s AWS resources (EKS, RDS, Redis, ECR repos, etc.).
+Runs `terraform destroy` on `live/aws/alpha`. Requires:
+
+1. `confirm=destroy-alpha` on `workflow_dispatch`
+2. **GitHub Environment `alpha-destroy`** with required reviewers (approval gate). Deploy/apply keep using Environment `alpha` without reviewers.
+
+After approval, destroy assumes the Terraform apply IAM role via Environment `alpha` (OIDC). Irreversible for that environment’s AWS resources (EKS, RDS, Redis, ECR repos, etc.).
 
 ```bash
 gh workflow run terraform-destroy-alpha.yml --ref master -f confirm=destroy-alpha
+# then approve the pending deployment for Environment alpha-destroy in the GitHub UI
 ```
 
 ## Live Alpha (manual only)
