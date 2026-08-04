@@ -102,6 +102,8 @@ gh workflow run terraform-destroy-alpha.yml --ref master -f confirm=destroy-alph
 
 Manual workflow: [`.github/workflows/terraform-live-alpha.yml`](terraform-live-alpha.yml).
 
+Optional input **`deploy_services`** (default **false**): after a successful Terraform apply, also runs [Deploy Services](deploy-services.yml) for all services. Leave unchecked for infra-only.
+
 1. Actions → **Terraform - Live Alpha** → **Run workflow** (pick the branch), or:
 
 ```bash

@@ -56,6 +56,57 @@ on:
         description: gateway-service (image api-gateway)
         type: boolean
         default: true
+  workflow_call:
+    inputs:
+      auth:
+        description: auth-service
+        type: boolean
+        default: true
+      catalog:
+        description: catalog-service
+        type: boolean
+        default: true
+      cart:
+        description: cart-service
+        type: boolean
+        default: true
+      pricing:
+        description: pricing-service
+        type: boolean
+        default: true
+      coupon:
+        description: coupon-service
+        type: boolean
+        default: true
+      inventory:
+        description: inventory-service
+        type: boolean
+        default: true
+      payment:
+        description: payment-service
+        type: boolean
+        default: true
+      order:
+        description: order-service
+        type: boolean
+        default: true
+      shipping:
+        description: shipping-service
+        type: boolean
+        default: true
+      notification:
+        description: notification-service
+        type: boolean
+        default: true
+      audit:
+        description: audit-service
+        type: boolean
+        default: true
+      gateway:
+        description: gateway-service (image api-gateway)
+        type: boolean
+        default: true
+
 
 permissions:
   contents: read
