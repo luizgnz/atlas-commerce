@@ -18,8 +18,8 @@ module "ecr" {
   additional_tags = var.additional_tags
 }
 
-# Create the GitHub Actions role used to push Atlas images to ECR. Reuses the
-# OIDC provider created by bootstrap/gh-actions-oidc.
+# Create the GitHub Actions roles used to push images to ECR and deploy to EKS.
+# Reuses the OIDC provider created by bootstrap/gh-actions-oidc.
 module "github_actions_iam" {
   source = "../../../modules/aws/iam"
 
@@ -28,6 +28,7 @@ module "github_actions_iam" {
 
   github_oidc_provider_arn = var.github_oidc_provider_arn
   ecr_repository_arns      = values(module.ecr.repository_arns)
+  eks_cluster_arn          = module.eks.cluster_arn
 
   additional_tags = var.additional_tags
 }

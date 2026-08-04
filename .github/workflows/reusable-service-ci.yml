@@ -24,6 +24,13 @@ on:
         required: false
         type: string
         default: 'CRITICAL,HIGH'
+      force-ecr-push:
+        description: |
+          Push the image to ECR even when the caller is not a push to master
+          (e.g. selective deploy via workflow_dispatch).
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -125,7 +132,7 @@ jobs:
 
       # ==================== BUILD & PUSH TO AMAZON ECR ====================
       - name: Configure AWS credentials through GitHub OIDC
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || inputs.force-ecr-push
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ vars.AWS_REGION }}
@@ -135,11 +142,11 @@ jobs:
 
       - name: Log in to Amazon ECR
         id: login_ecr
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || inputs.force-ecr-push
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push Docker Image to Amazon ECR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || inputs.force-ecr-push
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.service-path }}

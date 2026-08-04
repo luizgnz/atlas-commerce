@@ -1,3 +1,31 @@
+# GitHub Actions Workflows
+
+## Deploy Services (selective build → ECR → Helm)
+
+Manual workflow: [`.github/workflows/deploy-services.yml`](deploy-services.yml).
+
+1. Actions → **Deploy Services** → **Run workflow**.
+2. All twelve services are selected by default. Uncheck any you do **not** want to rebuild and roll out.
+3. Unchecking a service skips its build/push/rollout only — it does **not** uninstall or disable that workload in the cluster.
+4. The run builds from the branch/tag you selected, pushes `sha-<commit>-<run_id>-<attempt>` tags to ECR, then `helm upgrade`s release `atlas` in namespace `atlas` on EKS alpha (image overrides for the selected services only).
+
+### Repository variables required
+
+| Variable | Value |
+|---|---|
+| `AWS_REGION` | e.g. `eu-central-1` |
+| `AWS_ACCOUNT_ID` | AWS account ID |
+| `AWS_ECR_PUSH_ROLE_ARN` | output `github_actions_ecr_push_role_arn` from `live/aws/alpha` |
+| `ECR_REPOSITORY_PREFIX` | e.g. `atlas-commerce` |
+| `AWS_EKS_DEPLOY_ROLE_ARN` | output `github_actions_eks_deploy_role_arn` from `live/aws/alpha` |
+| `EKS_CLUSTER_NAME` | output `eks_cluster_name` from `live/aws/alpha` (default `atlas-commerce-alpha`) |
+
+Apply `live/aws/alpha` after pulling the EKS deploy role / access-entry Terraform so those outputs exist, then set the variables above.
+
+There is **no** approval gate on deploy in v1. A note at the bottom of `deploy-services.yml` lists adding a GitHub Environment with required reviewers as a follow-up.
+
+---
+
 # Terraform GitHub Actions Workflows
 
 Deploys `platform/terraform/live/aws/*` via `plan` on every PR and a gated `apply` on push, using OIDC — no long-lived AWS credentials in GitHub. See `platform/terraform/bootstrap/gh-actions-oidc/README.md` for the IAM side.

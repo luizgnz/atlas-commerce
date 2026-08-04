@@ -24,7 +24,7 @@ variable "github_repository" {
 }
 
 variable "github_branch" {
-  description = "Git branch allowed to publish images to ECR."
+  description = "Deprecated. Roles trust any branch via StringLike refs/heads/* (see locals.github_subject_pattern)."
   type        = string
   default     = "master"
 }
@@ -38,6 +38,18 @@ variable "role_name" {
   description = "IAM role name assumed by GitHub Actions through OIDC."
   type        = string
   default     = "atlas-commerce-github-actions-ecr-push-role"
+}
+
+variable "eks_cluster_arn" {
+  description = "EKS cluster ARN the deploy role may DescribeCluster. When null, the EKS deploy role is not created."
+  type        = string
+  default     = null
+}
+
+variable "eks_deploy_role_name" {
+  description = "IAM role name assumed by GitHub Actions to run helm/kubectl against EKS."
+  type        = string
+  default     = "atlas-commerce-github-actions-eks-deploy-role"
 }
 
 variable "additional_tags" {

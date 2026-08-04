@@ -100,3 +100,17 @@ output "github_actions_ecr_push_role_arn" {
 output "github_actions_ecr_push_role_name" {
   value = module.github_actions_iam.github_actions_ecr_push_role_name
 }
+
+output "github_actions_eks_deploy_role_arn" {
+  description = "ARN of the IAM role GitHub Actions assumes for helm deploy to EKS. Set as repo variable AWS_EKS_DEPLOY_ROLE_ARN."
+  value       = module.github_actions_iam.github_actions_eks_deploy_role_arn
+}
+
+output "github_actions_eks_deploy_role_name" {
+  value = module.github_actions_iam.github_actions_eks_deploy_role_name
+}
+
+output "eks_cluster_name" {
+  description = "EKS cluster name. Set as repo variable EKS_CLUSTER_NAME."
+  value       = module.eks.cluster_name
+}
