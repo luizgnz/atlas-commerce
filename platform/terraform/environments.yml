@@ -1,0 +1,23 @@
+# Per-environment values for the GitHub Actions Terraform workflows
+# (.github/workflows/reusable-terraform.yml). This is the single file to
+# edit when adding a new environment (e.g. staging, prod) or when any of
+# these values change (e.g. after re-running the bootstrap modules) — the
+# workflows themselves never need to change.
+#
+# All values here are identifiers (AWS account ID, region, role/bucket
+# names), not secrets: the OIDC trust policy on each IAM role already
+# restricts who can assume it to this repository, so it's safe for these
+# to be readable in a public repo.
+alpha:
+  awsRegion: eu-central-1
+  awsAccountId: "553337000139"
+  terraformStateBucket: atlas-commerce-shared-tfstate-553337000139-eu-central-1
+  terraformPlanRoleArn: arn:aws:iam::553337000139:role/gh-actions-atlas-commerce-terraform-plan
+  terraformApplyRoleArn: arn:aws:iam::553337000139:role/gh-actions-atlas-commerce-terraform-apply-alpha
+
+bootstrap:
+  awsRegion: eu-central-1
+  awsAccountId: "553337000139"
+  terraformStateBucket: atlas-commerce-shared-tfstate-553337000139-eu-central-1
+  terraformPlanRoleArn: arn:aws:iam::553337000139:role/gh-actions-atlas-commerce-terraform-plan
+  terraformApplyRoleArn: arn:aws:iam::553337000139:role/gh-actions-atlas-commerce-terraform-apply-bootstrap

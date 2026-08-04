@@ -102,5 +102,5 @@ resource "aws_iam_role_policy_attachment" "vpc_cni_policy" {
   role = aws_iam_role.vpc_cni[0].name
 
   # Grant ENI and IP address management permissions.
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  policy_arn = data.aws_iam_policy.eks_cni_policy.arn
 }

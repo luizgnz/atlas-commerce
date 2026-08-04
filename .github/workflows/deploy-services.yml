@@ -1,0 +1,294 @@
+# Selective deploy: build selected services from this ref, push to ECR, then
+# helm upgrade only those services' image tags on EKS (alpha).
+#
+# Unchecking a service skips its build/push/rollout. It does NOT uninstall or
+# disable that service in the cluster.
+name: Deploy Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      auth:
+        description: auth-service
+        type: boolean
+        default: true
+      catalog:
+        description: catalog-service
+        type: boolean
+        default: true
+      cart:
+        description: cart-service
+        type: boolean
+        default: true
+      pricing:
+        description: pricing-service
+        type: boolean
+        default: true
+      coupon:
+        description: coupon-service
+        type: boolean
+        default: true
+      inventory:
+        description: inventory-service
+        type: boolean
+        default: true
+      payment:
+        description: payment-service
+        type: boolean
+        default: true
+      order:
+        description: order-service
+        type: boolean
+        default: true
+      shipping:
+        description: shipping-service
+        type: boolean
+        default: true
+      notification:
+        description: notification-service
+        type: boolean
+        default: true
+      audit:
+        description: audit-service
+        type: boolean
+        default: true
+      gateway:
+        description: gateway-service (image api-gateway)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  checks: write
+  security-events: write
+  id-token: write
+
+concurrency:
+  group: deploy-services-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve selected services
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      selected: ${{ steps.select.outputs.selected }}
+      has_services: ${{ steps.select.outputs.has_services }}
+    steps:
+      - name: Build matrix from workflow inputs
+        id: select
+        env:
+          INPUT_AUTH: ${{ inputs.auth }}
+          INPUT_CATALOG: ${{ inputs.catalog }}
+          INPUT_CART: ${{ inputs.cart }}
+          INPUT_PRICING: ${{ inputs.pricing }}
+          INPUT_COUPON: ${{ inputs.coupon }}
+          INPUT_INVENTORY: ${{ inputs.inventory }}
+          INPUT_PAYMENT: ${{ inputs.payment }}
+          INPUT_ORDER: ${{ inputs.order }}
+          INPUT_SHIPPING: ${{ inputs.shipping }}
+          INPUT_NOTIFICATION: ${{ inputs.notification }}
+          INPUT_AUDIT: ${{ inputs.audit }}
+          INPUT_GATEWAY: ${{ inputs.gateway }}
+        run: |
+          set -euo pipefail
+
+          # key|service-name|service-path|docker-image-name|helm-key
+          catalog=$(cat <<'EOF'
+          auth|Auth Service|services/auth-service|auth-service|auth
+          catalog|Catalog Service|services/catalog-service|catalog-service|catalog
+          cart|Cart Service|services/cart-service|cart-service|cart
+          pricing|Pricing Service|services/pricing-service|pricing-service|pricing
+          coupon|Coupon Service|services/coupon-service|coupon-service|coupon
+          inventory|Inventory Service|services/inventory-service|inventory-service|inventory
+          payment|Payment Service|services/payment-service|payment-service|payment
+          order|Order Service|services/order-service|order-service|order
+          shipping|Shipping Service|services/shipping-service|shipping-service|shipping
+          notification|Notification Service|services/notification-service|notification-service|notification
+          audit|Audit Service|services/audit-service|audit-service|audit
+          gateway|Gateway Service|services/gateway-service|api-gateway|gateway
+          EOF
+          )
+
+          include='[]'
+          selected=()
+
+          while IFS='|' read -r key service_name service_path docker_image helm_key; do
+            key="$(echo "$key" | xargs)"
+            [[ -z "$key" ]] && continue
+
+            key_upper="$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')"
+            var="INPUT_${key_upper}"
+            enabled="${!var:-false}"
+
+            if [[ "$enabled" == "true" ]]; then
+              selected+=("$key")
+              include=$(jq -c \
+                --arg key "$key" \
+                --arg service_name "$service_name" \
+                --arg service_path "$service_path" \
+                --arg docker_image_name "$docker_image" \
+                --arg helm_key "$helm_key" \
+                '. + [{
+                  key: $key,
+                  service_name: $service_name,
+                  service_path: $service_path,
+                  docker_image_name: $docker_image_name,
+                  helm_key: $helm_key
+                }]' <<< "$include")
+            fi
+          done <<< "$catalog"
+
+          if [[ ${#selected[@]} -eq 0 ]]; then
+            echo "::error::No services selected. Enable at least one service before running deploy."
+            echo "has_services=false" >> "$GITHUB_OUTPUT"
+            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "selected=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          matrix=$(jq -c -n --argjson include "$include" '{include: $include}')
+          {
+            echo "has_services=true"
+            echo "matrix=${matrix}"
+            echo "selected=${selected[*]}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Selected services: ${selected[*]}"
+          echo "Matrix: ${matrix}"
+
+  build-push:
+    name: Build and push
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    uses: ./.github/workflows/reusable-service-ci.yml
+    with:
+      service-name: ${{ matrix.service_name }}
+      service-path: ${{ matrix.service_path }}
+      docker-image-name: ${{ matrix.docker_image_name }}
+      force-ecr-push: true
+
+  deploy:
+    name: Helm upgrade (alpha)
+    needs: [resolve, build-push]
+    runs-on: ubuntu-latest
+    # Same GitHub Environment as Terraform live alpha — OIDC sub is
+    # repo:ORG/REPO:environment:alpha (IAM trust must allow that claim).
+    # No required-reviewers configured on this Environment for deploy.
+    environment: alpha
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (EKS deploy role)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_EKS_DEPLOY_ROLE_ARN }}
+          role-session-name: atlas-helm-deploy-${{ github.run_id }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+
+      - name: Update kubeconfig
+        run: |
+          set -euo pipefail
+          aws eks update-kubeconfig \
+            --name "${{ vars.EKS_CLUSTER_NAME }}" \
+            --region "${{ vars.AWS_REGION }}"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Helm upgrade selected service images
+        env:
+          MATRIX_JSON: ${{ needs.resolve.outputs.matrix }}
+          SELECTED: ${{ needs.resolve.outputs.selected }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ECR_REPOSITORY_PREFIX: ${{ vars.ECR_REPOSITORY_PREFIX }}
+          IMAGE_TAG: sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          CHART_DIR="platform/helm/atlas-commerce"
+          RELEASE_NAME="atlas"
+          NAMESPACE="atlas"
+          REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          echo "Deploying selected services: ${SELECTED}"
+          echo "Image tag: ${IMAGE_TAG}"
+
+          SET_ARGS=()
+          while IFS= read -r row; do
+            helm_key=$(jq -r '.helm_key' <<< "$row")
+            docker_image=$(jq -r '.docker_image_name' <<< "$row")
+            repository="${REGISTRY}/${ECR_REPOSITORY_PREFIX}/${docker_image}"
+            SET_ARGS+=(
+              --set "${helm_key}.deployment.image.repository=${repository}"
+              --set "${helm_key}.deployment.image.tag=${IMAGE_TAG}"
+            )
+          done < <(jq -c '.include[]' <<< "$MATRIX_JSON")
+
+          if helm status "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_NAME} exists — upgrading with --reuse-values (image overrides only)."
+            helm upgrade "$RELEASE_NAME" "$CHART_DIR" \
+              -n "$NAMESPACE" \
+              --reuse-values \
+              "${SET_ARGS[@]}"
+          else
+            echo "Release ${RELEASE_NAME} not found — installing with base values + image overrides."
+            echo "Note: first install expects prior platform bootstrap (RDS/Redis hosts, secrets)."
+            VALUES_FILES=(
+              "$CHART_DIR/values/auth.yaml"
+              "$CHART_DIR/values/catalog.yaml"
+              "$CHART_DIR/values/cart.yaml"
+              "$CHART_DIR/values/pricing.yaml"
+              "$CHART_DIR/values/coupon.yaml"
+              "$CHART_DIR/values/inventory.yaml"
+              "$CHART_DIR/values/payment.yaml"
+              "$CHART_DIR/values/order.yaml"
+              "$CHART_DIR/values/shipping.yaml"
+              "$CHART_DIR/values/notification.yaml"
+              "$CHART_DIR/values/audit.yaml"
+              "$CHART_DIR/values/gateway.yaml"
+              "$CHART_DIR/values/kafka.yaml"
+              "$CHART_DIR/values/postgres.yaml"
+              "$CHART_DIR/values/redis.yaml"
+              "$CHART_DIR/values/ingress.yaml"
+              "$CHART_DIR/values.dev.yaml"
+              "$CHART_DIR/values/images.dev.yaml"
+            )
+            HELM_ARGS=()
+            for file in "${VALUES_FILES[@]}"; do
+              if [[ ! -f "$file" ]]; then
+                echo "ERROR: values file not found: $file" >&2
+                exit 1
+              fi
+              HELM_ARGS+=("-f" "$file")
+            done
+            helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" \
+              -n "$NAMESPACE" \
+              --create-namespace \
+              "${HELM_ARGS[@]}" \
+              "${SET_ARGS[@]}"
+          fi
+
+          echo
+          kubectl get pods -n "$NAMESPACE"
+
+# -----------------------------------------------------------------------------
+# Possible improvements
+# -----------------------------------------------------------------------------
+# - Optional approval gate: add required reviewers on GitHub Environment
+#   `alpha` if deploy should pause for human sign-off (Terraform apply already
+#   uses that Environment for OIDC; today deploy has no reviewers).
+# - Persist image tags back to values/images.*.yaml (GitOps) once Argo CD is
+#   wired, instead of imperative helm --set overrides.
+# - Add staging/prod targets with stricter branch and OIDC trust restrictions.
+# - Narrow the EKS deploy IAM role from cluster-admin to namespace-scoped RBAC.
+# - Include review-service / user-profile-service when they have CI + Helm keys.
+# -----------------------------------------------------------------------------

@@ -59,5 +59,5 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_policy" {
   role = aws_iam_role.ebs_csi[0].name
 
   # Use AWS's tag-scoped managed policy for the EBS CSI driver.
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  policy_arn = data.aws_iam_policy.ebs_csi_driver_policy.arn
 }

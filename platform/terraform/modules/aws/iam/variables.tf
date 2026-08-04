@@ -6,6 +6,11 @@ variable "environment" {
   type = string
 }
 
+variable "github_oidc_provider_arn" {
+  description = "ARN of the GitHub Actions OIDC provider to trust. AWS allows only one OIDC provider per issuer URL per account, so this must reference the provider created by bootstrap/gh-actions-oidc rather than creating a new one."
+  type        = string
+}
+
 variable "github_organization" {
   description = "GitHub organization or user that owns the repository."
   type        = string
@@ -19,9 +24,15 @@ variable "github_repository" {
 }
 
 variable "github_branch" {
-  description = "Git branch allowed to publish images to ECR."
+  description = "Deprecated. Roles trust refs/heads/* and environment:<env> (see locals.github_subject_patterns)."
   type        = string
   default     = "master"
+}
+
+variable "additional_github_repositories" {
+  description = "Extra OWNER/REPO values trusted for OIDC (in addition to github_organization/github_repository). Defaults include the fork used for CI."
+  type        = list(string)
+  default     = ["luizgnz/atlas-commerce"]
 }
 
 variable "ecr_repository_arns" {
@@ -33,6 +44,18 @@ variable "role_name" {
   description = "IAM role name assumed by GitHub Actions through OIDC."
   type        = string
   default     = "atlas-commerce-github-actions-ecr-push-role"
+}
+
+variable "eks_cluster_arn" {
+  description = "EKS cluster ARN the deploy role may DescribeCluster. When null, the EKS deploy role is not created."
+  type        = string
+  default     = null
+}
+
+variable "eks_deploy_role_name" {
+  description = "IAM role name assumed by GitHub Actions to run helm/kubectl against EKS."
+  type        = string
+  default     = "atlas-commerce-github-actions-eks-deploy-role"
 }
 
 variable "additional_tags" {

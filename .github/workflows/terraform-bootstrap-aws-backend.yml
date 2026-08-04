@@ -1,0 +1,26 @@
+name: Terraform - Bootstrap AWS Backend (plan only)
+
+# This module is applied by hand, rarely — see its README. It uses local
+# state on purpose (it creates the remote backend everything else uses), so
+# CI only runs plan/validate as a PR check, never an automated apply.
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "platform/terraform/bootstrap/aws-backend/**"
+      - ".github/workflows/reusable-terraform.yml"
+      - ".github/workflows/terraform-bootstrap-aws-backend.yml"
+
+concurrency:
+  group: terraform-bootstrap-aws-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: Terraform
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment-name: bootstrap
+      working-directory: platform/terraform/bootstrap/aws-backend
+      apply-enabled: false
+      uses-remote-backend: false

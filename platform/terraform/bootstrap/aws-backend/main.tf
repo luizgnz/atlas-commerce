@@ -89,22 +89,7 @@ resource "aws_s3_bucket_policy" "terraform_state" {
   policy = data.aws_iam_policy_document.terraform_state.json
 }
 
-resource "aws_dynamodb_table" "terraform_locks" {
-  name                        = local.lock_table_name
-  billing_mode                = "PAY_PER_REQUEST"
-  hash_key                    = "LockID"
-  deletion_protection_enabled = var.enable_lock_table_deletion_protection
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  point_in_time_recovery {
-    enabled = true
-  }
-
-  server_side_encryption {
-    enabled = true
-  }
-}
+# DynamoDB locking is obsolete for this backend: Terraform >= 1.10 (see versions.tf)
+# uses the native S3 lockfile (backend.hcl sets use_lockfile = true) instead of a
+# DynamoDB lock table. Kept out on purpose to avoid provisioning an orphaned resource
+# that the locking mechanism never touches.

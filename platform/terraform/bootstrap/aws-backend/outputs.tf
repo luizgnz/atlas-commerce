@@ -8,24 +8,26 @@ output "terraform_state_bucket_arn" {
   value       = aws_s3_bucket.terraform_state.arn
 }
 
-output "terraform_lock_table_name" {
-  description = "DynamoDB table used for Terraform state locking compatibility."
-  value       = aws_dynamodb_table.terraform_locks.name
-}
-
 output "aws_region" {
   description = "AWS region where the backend resources were created."
   value       = var.aws_region
 }
 
-output "backend_config_example_dev" {
-  description = "Example backend configuration for live/aws/dev/backend.hcl."
+output "backend_config_template" {
+  description = <<-EOT
+    Backend config body for any live/aws/<env>/backend.hcl. The bucket/region
+    values are read from this state, not retyped by hand, to avoid pointing
+    a new environment at the wrong AWS account's state bucket.
+
+    Generate a real backend.hcl without manual transcription, e.g. for alpha:
+      terraform output -raw backend_config_template \
+        | sed 's#<ENV>#alpha#' > ../../live/aws/alpha/backend.hcl
+  EOT
   value       = <<EOT
-bucket         = "${aws_s3_bucket.terraform_state.bucket}"
-key            = "atlas-commerce/dev/terraform.tfstate"
-region         = "${var.aws_region}"
-encrypt        = true
-use_lockfile   = true
-dynamodb_table = "${aws_dynamodb_table.terraform_locks.name}"
+bucket       = "${aws_s3_bucket.terraform_state.bucket}"
+key          = "atlas-commerce/<ENV>/terraform.tfstate"
+region       = "${var.aws_region}"
+encrypt      = true
+use_lockfile = true
 EOT
 }

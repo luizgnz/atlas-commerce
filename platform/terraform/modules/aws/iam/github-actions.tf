@@ -1,21 +1,4 @@
-# Register GitHub Actions as a trusted OIDC identity provider in this AWS account.
-resource "aws_iam_openid_connect_provider" "github_actions" {
-  # GitHub publishes OIDC tokens from this issuer URL.
-  url = "https://token.actions.githubusercontent.com"
-
-  # The official AWS GitHub Action requests tokens for AWS STS.
-  client_id_list = ["sts.amazonaws.com"]
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${local.name_prefix}-github-actions-oidc"
-      Role = "github-actions-oidc-provider"
-    }
-  )
-}
-
-# Build the trust policy that limits role assumption to this repository and branch.
+# Build the trust policy that limits role assumption to this repository's branches.
 data "aws_iam_policy_document" "github_actions_assume_role" {
   statement {
     # Allow GitHub OIDC tokens to request temporary AWS credentials.
@@ -26,11 +9,13 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
     ]
 
     principals {
-      # Trust only the GitHub OIDC provider created above.
+      # Trust the GitHub Actions OIDC provider created by bootstrap/gh-actions-oidc.
+      # AWS allows only one OIDC provider per issuer URL per account, so this
+      # module reuses it instead of creating its own.
       type = "Federated"
 
       identifiers = [
-        aws_iam_openid_connect_provider.github_actions.arn
+        var.github_oidc_provider_arn
       ]
     }
 
@@ -42,10 +27,11 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
     }
 
     condition {
-      # Restrict access to Nitros64/atlas-commerce on master only.
-      test     = "StringEquals"
+      # Allow branch refs (ECR push) and environment:<env> (deploy / Terraform-style).
+      # Not pull_request subjects. See local.github_subject_patterns.
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [local.github_subject]
+      values   = local.github_subject_patterns
     }
   }
 }
@@ -100,7 +86,7 @@ data "aws_iam_policy_document" "github_actions_ecr_push" {
       "ecr:BatchGetImage"
     ]
 
-    # Restrict image pushes to the ECR repositories passed by live/aws/shared.
+    # Restrict image pushes to the ECR repositories passed by live/aws/alpha.
     resources = var.ecr_repository_arns
   }
 }
@@ -115,4 +101,47 @@ resource "aws_iam_role_policy" "github_actions_ecr_push" {
 
   # Use the least-privilege ECR policy built above.
   policy = data.aws_iam_policy_document.github_actions_ecr_push.json
+}
+
+# -----------------------------------------------------------------------------
+# EKS deploy role (helm upgrade / kubectl from GitHub Actions)
+# -----------------------------------------------------------------------------
+
+resource "aws_iam_role" "github_actions_eks_deploy" {
+  count = local.create_eks_deploy_role ? 1 : 0
+
+  name                 = var.eks_deploy_role_name
+  assume_role_policy   = data.aws_iam_policy_document.github_actions_assume_role.json
+  max_session_duration = 3600
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = var.eks_deploy_role_name
+      Role = "github-actions-eks-deploy"
+    }
+  )
+}
+
+data "aws_iam_policy_document" "github_actions_eks_deploy" {
+  count = local.create_eks_deploy_role ? 1 : 0
+
+  statement {
+    sid    = "EksDescribeForKubeconfig"
+    effect = "Allow"
+
+    actions = [
+      "eks:DescribeCluster",
+    ]
+
+    resources = [var.eks_cluster_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_eks_deploy" {
+  count = local.create_eks_deploy_role ? 1 : 0
+
+  name   = "${local.name_prefix}-github-actions-eks-deploy"
+  role   = aws_iam_role.github_actions_eks_deploy[0].id
+  policy = data.aws_iam_policy_document.github_actions_eks_deploy[0].json
 }

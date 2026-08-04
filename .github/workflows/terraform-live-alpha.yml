@@ -1,0 +1,30 @@
+name: Terraform - Live Alpha
+
+on:
+  push:
+    paths:
+      - "platform/terraform/live/aws/alpha/**"
+      - "platform/terraform/modules/**"
+      - ".github/workflows/reusable-terraform.yml"
+      - ".github/workflows/terraform-live-alpha.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "platform/terraform/live/aws/alpha/**"
+      - "platform/terraform/modules/**"
+      - ".github/workflows/reusable-terraform.yml"
+      - ".github/workflows/terraform-live-alpha.yml"
+
+concurrency:
+  group: terraform-live-alpha-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    name: Terraform
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment-name: alpha
+      working-directory: platform/terraform/live/aws/alpha
+      state-key: atlas-commerce/alpha/terraform.tfstate
+      require-master: false

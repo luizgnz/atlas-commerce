@@ -1,0 +1,26 @@
+name: Terraform - Bootstrap GH Actions OIDC (plan only)
+
+# This module creates the IAM roles other Terraform workflows assume, and
+# changes here are rare and security-sensitive — applied by hand, see its
+# README. CI only runs plan/validate as a PR check, never an automated apply.
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "platform/terraform/bootstrap/gh-actions-oidc/**"
+      - ".github/workflows/reusable-terraform.yml"
+      - ".github/workflows/terraform-bootstrap-gh-actions-oidc.yml"
+
+concurrency:
+  group: terraform-bootstrap-gh-actions-oidc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: Terraform
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment-name: bootstrap
+      working-directory: platform/terraform/bootstrap/gh-actions-oidc
+      apply-enabled: false
+      state-key: atlas-commerce/bootstrap/gh-actions-oidc/terraform.tfstate
