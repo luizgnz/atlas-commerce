@@ -175,6 +175,10 @@ jobs:
     name: Helm upgrade (alpha)
     needs: [resolve, build-push]
     runs-on: ubuntu-latest
+    # Same GitHub Environment as Terraform live alpha — OIDC sub is
+    # repo:ORG/REPO:environment:alpha (IAM trust must allow that claim).
+    # No required-reviewers configured on this Environment for deploy.
+    environment: alpha
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -279,9 +283,9 @@ jobs:
 # -----------------------------------------------------------------------------
 # Possible improvements
 # -----------------------------------------------------------------------------
-# - Approval gate: bind the deploy job to a GitHub Environment (e.g. alpha)
-#   with required reviewers so a human must approve before helm upgrade runs.
-#   Mirror the Terraform apply pattern in reusable-terraform.yml / README.md.
+# - Optional approval gate: add required reviewers on GitHub Environment
+#   `alpha` if deploy should pause for human sign-off (Terraform apply already
+#   uses that Environment for OIDC; today deploy has no reviewers).
 # - Persist image tags back to values/images.*.yaml (GitOps) once Argo CD is
 #   wired, instead of imperative helm --set overrides.
 # - Add staging/prod targets with stricter branch and OIDC trust restrictions.

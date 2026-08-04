@@ -24,9 +24,15 @@ variable "github_repository" {
 }
 
 variable "github_branch" {
-  description = "Deprecated. Roles trust any branch via StringLike refs/heads/* (see locals.github_subject_pattern)."
+  description = "Deprecated. Roles trust refs/heads/* and environment:<env> (see locals.github_subject_patterns)."
   type        = string
   default     = "master"
+}
+
+variable "additional_github_repositories" {
+  description = "Extra OWNER/REPO values trusted for OIDC (in addition to github_organization/github_repository). Defaults include the fork used for CI."
+  type        = list(string)
+  default     = ["luizgnz/atlas-commerce"]
 }
 
 variable "ecr_repository_arns" {

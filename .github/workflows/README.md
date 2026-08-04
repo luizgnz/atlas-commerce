@@ -4,7 +4,15 @@
 
 Manual workflow: [`.github/workflows/deploy-services.yml`](deploy-services.yml).
 
-1. Actions → **Deploy Services** → **Run workflow**.
+GitHub only registers `workflow_dispatch` from the **default branch** (`master`). Once `deploy-services.yml` is on `master`, you can run it from **any branch**:
+
+```bash
+gh workflow run deploy-services.yml --ref <branch>
+```
+
+The run uses the selected ref’s code (workflows + services). The Helm job uses GitHub Environment `alpha` (same OIDC claim as Terraform live alpha: `…:environment:alpha`). IAM for ECR push and EKS deploy trusts both `ref:refs/heads/*` and `environment:alpha`.
+
+1. Actions → **Deploy Services** → **Run workflow** (pick the branch), or `gh workflow run` as above.
 2. All twelve services are selected by default. Uncheck any you do **not** want to rebuild and roll out.
 3. Unchecking a service skips its build/push/rollout only — it does **not** uninstall or disable that workload in the cluster.
 4. The run builds from the branch/tag you selected, pushes `sha-<commit>-<run_id>-<attempt>` tags to ECR, then `helm upgrade`s release `atlas` in namespace `atlas` on EKS alpha (image overrides for the selected services only).
@@ -20,9 +28,9 @@ Manual workflow: [`.github/workflows/deploy-services.yml`](deploy-services.yml).
 | `AWS_EKS_DEPLOY_ROLE_ARN` | output `github_actions_eks_deploy_role_arn` from `live/aws/alpha` |
 | `EKS_CLUSTER_NAME` | output `eks_cluster_name` from `live/aws/alpha` (default `atlas-commerce-alpha`) |
 
-Apply `live/aws/alpha` after pulling the EKS deploy role / access-entry Terraform so those outputs exist, then set the variables above.
+Apply `live/aws/alpha` after pulling the EKS deploy role / IAM OIDC trust updates so those outputs exist and `environment:alpha` is trusted, then set the variables above.
 
-There is **no** approval gate on deploy in v1. A note at the bottom of `deploy-services.yml` lists adding a GitHub Environment with required reviewers as a follow-up.
+There is **no** approval gate on deploy in v1 (Environment `alpha` has no required reviewers for this path).
 
 ---
 

@@ -27,10 +27,11 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
     }
 
     condition {
-      # Allow any branch of Nitros64/atlas-commerce (not pull_request subjects).
+      # Allow branch refs (ECR push) and environment:<env> (deploy / Terraform-style).
+      # Not pull_request subjects. See local.github_subject_patterns.
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [local.github_subject_pattern]
+      values   = local.github_subject_patterns
     }
   }
 }

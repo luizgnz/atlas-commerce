@@ -1,10 +1,21 @@
 locals {
   name_prefix = "${var.project}-${var.environment}"
 
-  # Any branch on this repo may assume the GitHub Actions roles (alpha is a
-  # disposable environment; selective deploy runs via workflow_dispatch from
-  # the chosen ref). Pull requests are excluded — only refs/heads/*.
-  github_subject_pattern = "repo:${var.github_organization}/${var.github_repository}:ref:refs/heads/*"
+  # Upstream + fork (same repos as bootstrap/gh-actions-oidc).
+  github_repo_names = distinct(concat(
+    ["${var.github_organization}/${var.github_repository}"],
+    var.additional_github_repositories
+  ))
+
+  # ECR push (reusable-service-ci on a branch) mints ref:refs/heads/<branch>.
+  # Deploy job binds GitHub Environment `alpha` and mints environment:alpha
+  # (same claim shape as Terraform apply). Trust both forms; exclude PRs.
+  github_subject_patterns = flatten([
+    for repo in local.github_repo_names : [
+      "repo:${repo}:ref:refs/heads/*",
+      "repo:${repo}:environment:${var.environment}",
+    ]
+  ])
 
   create_eks_deploy_role = var.eks_cluster_arn != null
 
