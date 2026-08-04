@@ -47,25 +47,27 @@ Manual workflow: [`.github/workflows/deploy-services.yml`](deploy-services.yml).
 gh workflow run deploy-services.yml --ref <branch>
 ```
 
-The run uses the selected ref’s code (workflows + services). The Helm job uses GitHub Environment `alpha` (same OIDC claim as Terraform live alpha: `…:environment:alpha`). IAM for ECR push and EKS deploy trusts both `ref:refs/heads/*` and `environment:alpha`.
+The run uses the selected ref’s code (workflows + services). Both the ECR build/push job (via `reusable-service-ci`) and the Helm deploy job use GitHub Environment `alpha` (OIDC claim `…:environment:alpha`). IAM for ECR push and EKS deploy trusts both `ref:refs/heads/*` and `environment:alpha`. Per-service CI wrappers inherit the same Environment through the reusable job (default `github-environment: alpha`).
 
 1. Actions → **Deploy Services** → **Run workflow** (pick the branch), or `gh workflow run` as above.
 2. All twelve services are selected by default. Uncheck any you do **not** want to rebuild and roll out.
 3. Unchecking a service skips its build/push/rollout only — it does **not** uninstall or disable that workload in the cluster.
 4. The run builds from the branch/tag you selected, pushes `sha-<commit>-<run_id>-<attempt>` tags to ECR, then `helm upgrade`s release `atlas` in namespace `atlas` on EKS alpha (image overrides for the selected services only).
 
-### Repository variables required
+### Environment `alpha` Variables required
+
+Set these under **Settings → Environments → alpha → Environment variables** (not repository Variables). ARNs and IDs are fine as Variables; Secrets are only needed if you choose to store sensitive values that way.
 
 | Variable | Value |
 |---|---|
-| `AWS_REGION` | e.g. `eu-central-1` |
+| `AWS_REGION` | `eu-central-1` |
 | `AWS_ACCOUNT_ID` | AWS account ID |
 | `AWS_ECR_PUSH_ROLE_ARN` | output `github_actions_ecr_push_role_arn` from `live/aws/alpha` |
-| `ECR_REPOSITORY_PREFIX` | e.g. `atlas-commerce` |
+| `ECR_REPOSITORY_PREFIX` | `atlas-commerce` |
 | `AWS_EKS_DEPLOY_ROLE_ARN` | output `github_actions_eks_deploy_role_arn` from `live/aws/alpha` |
-| `EKS_CLUSTER_NAME` | output `eks_cluster_name` from `live/aws/alpha` (default `atlas-commerce-alpha`) |
+| `EKS_CLUSTER_NAME` | `atlas-commerce-alpha` (output `eks_cluster_name` from `live/aws/alpha`) |
 
-Apply `live/aws/alpha` after pulling the EKS deploy role / IAM OIDC trust updates so those outputs exist and `environment:alpha` is trusted, then set the variables above.
+Apply `live/aws/alpha` after pulling the EKS deploy role / IAM OIDC trust updates so those outputs exist and `environment:alpha` is trusted, then set the Environment variables above.
 
 There is **no** approval gate on deploy in v1 (Environment `alpha` has no required reviewers for this path).
 
@@ -105,19 +107,12 @@ All three call the shared `reusable-terraform.yml`. `alpha` is currently the onl
 
 1. Apply `bootstrap/aws-backend` by hand (already done — see its README).
 2. Apply `bootstrap/gh-actions-oidc` by hand (see its README) to create the OIDC provider and the `plan`/`apply-<env>` IAM roles.
-3. In the GitHub repo settings, set these **repository variables** (`Settings → Secrets and variables → Actions → Variables`):
-
-   | Variable | Value |
-   |---|---|
-   | `AWS_REGION` | `eu-central-1` |
-   | `AWS_ACCOUNT_ID` | `553337000139` |
-   | `TERRAFORM_STATE_BUCKET` | output `terraform_state_bucket_name` from `bootstrap/aws-backend` |
-   | `TERRAFORM_PLAN_ROLE_ARN` | output `plan_role_arn` from `bootstrap/gh-actions-oidc` |
-
+3. Keep `platform/terraform/environments.yml` up to date — Terraform plan/apply reads AWS account/region, state bucket, and plan/apply role ARNs from that file (not from GitHub repository Variables).
 4. Create a **GitHub Environment** per deployable Terraform env (`alpha`, and later `staging`/`prod`) under `Settings → Environments`:
    - **alpha (temporary):** leave **required reviewers empty** so `workflow_dispatch` apply does not pause. Code cannot clear reviewers — do it in the GitHub UI if any are set.
    - Later / staging/prod: add required reviewers when you want a human sign-off.
-   - Apply role ARNs come from `environments.yml` via the reusable workflow `config` job (no environment-scoped variables required).
+   - Terraform apply uses the Environment for the OIDC `…:environment:<name>` claim; role ARNs still come from `environments.yml` via the reusable workflow `config` job.
+   - For service CI / Deploy Services (ECR push + Helm), set the Environment Variables listed in [Environment `alpha` Variables required](#environment-alpha-variables-required) above.
 
 ## Approving a real deploy (staging/prod, or alpha after re-enabling gates)
 

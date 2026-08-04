@@ -170,6 +170,7 @@ jobs:
       service-path: ${{ matrix.service_path }}
       docker-image-name: ${{ matrix.docker_image_name }}
       force-ecr-push: true
+      github-environment: alpha
 
   deploy:
     name: Helm upgrade (alpha)

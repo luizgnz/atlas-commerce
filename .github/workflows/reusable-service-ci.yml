@@ -31,6 +31,14 @@ on:
         required: false
         type: boolean
         default: false
+      github-environment:
+        description: |
+          GitHub Environment whose Variables/Secrets supply AWS OIDC and ECR
+          config (AWS_REGION, AWS_ACCOUNT_ID, AWS_ECR_PUSH_ROLE_ARN,
+          ECR_REPOSITORY_PREFIX). Default is alpha.
+        required: false
+        type: string
+        default: 'alpha'
 
 permissions:
   contents: read
@@ -42,6 +50,8 @@ jobs:
   build-test-and-push:
     name: Build, Test and Push ${{ inputs.service-name }}
     runs-on: ubuntu-latest
+    # Environment Variables (not repository vars) for AWS OIDC / ECR push.
+    environment: ${{ inputs.github-environment }}
 
     defaults:
       run:
