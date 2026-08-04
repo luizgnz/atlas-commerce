@@ -264,7 +264,7 @@ jobs:
               "$CHART_DIR/values/postgres.yaml"
               "$CHART_DIR/values/redis.yaml"
               "$CHART_DIR/values/ingress.yaml"
-              "$CHART_DIR/values.dev.yaml"
+              "$CHART_DIR/values.alpha.yaml"
               "$CHART_DIR/values/images.dev.yaml"
             )
             HELM_ARGS=()

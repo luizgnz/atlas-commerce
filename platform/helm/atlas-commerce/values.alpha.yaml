@@ -1,0 +1,95 @@
+# AWS alpha (live/aws/alpha) — managed RDS + ElastiCache.
+# Secrets are synchronized by External Secrets Operator (must be installed first).
+
+secretManagement:
+  createByHelm: false
+
+  externalSecrets:
+    enabled: true
+    refreshInterval: 1h
+
+    secretStore:
+      enabled: true
+      name: aws-secrets-manager
+      kind: ClusterSecretStore
+      service: SecretsManager
+      region: eu-central-1
+      serviceAccountName: external-secrets
+      serviceAccountNamespace: external-secrets
+
+    secrets:
+      jwt:
+        enabled: true
+        remoteKey: atlas-commerce/alpha/platform
+        property: SECURITY_JWT_SECRET
+
+      postgres:
+        enabled: true
+        remoteKey: atlas-commerce/alpha/platform
+        passwordProperty: POSTGRES_PASSWORD
+
+      redis:
+        enabled: true
+        remoteKey: atlas-commerce/alpha/platform
+        property: REDIS_PASSWORD
+
+secrets:
+  jwt:
+    name: jwt-secret
+
+postgres:
+  enabled: false
+
+  external:
+    enabled: true
+    host: atlas-commerce-alpha-postgresql.c50k4k2sgz9d.eu-central-1.rds.amazonaws.com
+    port: 5432
+
+  bootstrap:
+    enabled: true
+    image: postgres:17-alpine
+    backoffLimit: 3
+
+    adminSecret:
+      name: postgres-admin-secret
+      remoteKey: arn:aws:secretsmanager:eu-central-1:553337000139:secret:rds!db-3abc4a81-f5e9-4d66-9473-cbbbb311f680-LKLa49
+      usernameProperty: username
+      passwordProperty: password
+
+    appPasswordSecretName: postgres-auth-secret
+    appPasswordSecretKey: POSTGRES_PASSWORD
+
+runtime:
+  datasource:
+    hikari:
+      maximumPoolSize: 4
+      minimumIdle: 0
+      connectionTimeout: 60000
+
+auth:
+  datasource:
+    hikari:
+      maximumPoolSize: 4
+      minimumIdle: 0
+      connectionTimeout: 60000
+
+redis:
+  enabled: false
+
+  external:
+    enabled: true
+    host: master.atlas-commerce-alpha-redis.mm3ynb.euc1.cache.amazonaws.com
+    port: "6379"
+    sslEnabled: true
+
+catalog:
+  redis:
+    host: master.atlas-commerce-alpha-redis.mm3ynb.euc1.cache.amazonaws.com
+
+gateway:
+  env:
+    redisHost: master.atlas-commerce-alpha-redis.mm3ynb.euc1.cache.amazonaws.com
+
+kafka:
+  pvc:
+    storageClassName: gp2
