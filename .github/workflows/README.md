@@ -66,6 +66,9 @@ Set these under **Settings → Environments → alpha → Environment variables*
 | `ECR_REPOSITORY_PREFIX` | `atlas-commerce` |
 | `AWS_EKS_DEPLOY_ROLE_ARN` | output `github_actions_eks_deploy_role_arn` from `live/aws/alpha` |
 | `EKS_CLUSTER_NAME` | `atlas-commerce-alpha` (output `eks_cluster_name` from `live/aws/alpha`) |
+| `EXTERNAL_SECRETS_ROLE_ARN` | optional; output `external_secrets_role_arn` from `live/aws/alpha`. If unset, defaults to `arn:aws:iam::<account>:role/atlas-commerce-alpha-external-secrets-role` |
+
+Before Helm, Deploy Services checks for External Secrets CRDs and **installs the operator** (Helm chart `external-secrets`) if they are missing.
 
 Apply `live/aws/alpha` after pulling the EKS deploy role / IAM OIDC trust updates so those outputs exist and `environment:alpha` is trusted, then set the Environment variables above.
 

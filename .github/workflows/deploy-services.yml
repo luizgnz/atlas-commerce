@@ -204,6 +204,43 @@ jobs:
         with:
           version: v3.16.3
 
+      - name: Ensure External Secrets Operator
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          EXTERNAL_SECRETS_ROLE_ARN: ${{ vars.EXTERNAL_SECRETS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+
+          if kubectl get crd clustersecretstores.external-secrets.io >/dev/null 2>&1 \
+            && kubectl get crd externalsecrets.external-secrets.io >/dev/null 2>&1; then
+            echo "External Secrets CRDs already present — skipping install."
+            kubectl get pods -n external-secrets || true
+            exit 0
+          fi
+
+          ROLE_ARN="${EXTERNAL_SECRETS_ROLE_ARN:-}"
+          if [[ -z "${ROLE_ARN}" ]]; then
+            ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/atlas-commerce-alpha-external-secrets-role"
+          fi
+
+          echo "External Secrets CRDs missing — installing operator with IRSA ${ROLE_ARN}"
+          helm repo add external-secrets https://charts.external-secrets.io >/dev/null 2>&1 || true
+          helm repo update
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            -n external-secrets \
+            --create-namespace \
+            --set installCRDs=true \
+            --set serviceAccount.create=true \
+            --set serviceAccount.name=external-secrets \
+            --set-string "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=${ROLE_ARN}" \
+            --wait \
+            --timeout 5m
+
+          kubectl rollout status deployment/external-secrets -n external-secrets --timeout=5m
+          kubectl rollout status deployment/external-secrets-webhook -n external-secrets --timeout=5m
+          kubectl rollout status deployment/external-secrets-cert-controller -n external-secrets --timeout=5m
+          kubectl get pods -n external-secrets
+
       - name: Helm upgrade selected service images
         env:
           MATRIX_JSON: ${{ needs.resolve.outputs.matrix }}
