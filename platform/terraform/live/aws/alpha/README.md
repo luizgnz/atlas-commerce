@@ -1,6 +1,6 @@
 # Atlas Commerce - AWS Alpha Environment
 
-Terraform root module for the Atlas Commerce `alpha` (development) environment in AWS Frankfurt (`eu-central-1`).
+Terraform root module for the Atlas Commerce `alpha` (development) environment, deployed to AWS Frankfurt (`eu-central-1`).
 
 ## What This Environment Creates
 
