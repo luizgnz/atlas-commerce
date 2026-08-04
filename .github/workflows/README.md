@@ -82,6 +82,16 @@ Deploys `platform/terraform/live/aws/*` with OIDC — no long-lived AWS credenti
 
 All Terraform entrypoints are **manual only** (`workflow_dispatch`), including bootstrap plan/validate workflows.
 
+## Destroy Alpha (manual only)
+
+Manual workflow: [`.github/workflows/terraform-destroy-alpha.yml`](terraform-destroy-alpha.yml).
+
+Runs `terraform destroy` on `live/aws/alpha`. Requires `confirm=destroy-alpha` on `workflow_dispatch`. Uses GitHub Environment `alpha` and the Terraform apply IAM role. Irreversible for that environment’s AWS resources (EKS, RDS, Redis, ECR repos, etc.).
+
+```bash
+gh workflow run terraform-destroy-alpha.yml --ref master -f confirm=destroy-alpha
+```
+
 ## Live Alpha (manual only)
 
 Manual workflow: [`.github/workflows/terraform-live-alpha.yml`](terraform-live-alpha.yml).
