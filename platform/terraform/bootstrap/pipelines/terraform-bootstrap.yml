@@ -1,0 +1,19 @@
+name: Terraform - Bootstrap (plan only)
+
+# Bootstrap is applied by hand (local state). CI only runs plan/validate.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: Terraform
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment-name: bootstrap
+      working-directory: platform/terraform/bootstrap
+      apply-enabled: false
+      uses-remote-backend: false

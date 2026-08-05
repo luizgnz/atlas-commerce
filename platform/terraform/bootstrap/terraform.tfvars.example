@@ -1,0 +1,34 @@
+project     = "atlas-commerce"
+environment = "shared"
+aws_region  = "eu-central-1"
+
+# Optional. Leave null to auto-generate:
+# atlas-commerce-shared-tfstate-<account-id>-eu-central-1
+# state_bucket_name = "atlas-commerce-shared-tfstate-123456789012-eu-central-1"
+
+force_destroy_state_bucket = false
+
+# owner_id / repo_id from:
+#   gh api repos/OWNER/REPO --jq '{owner_id:.owner.id,repo_id:.id}'
+github_repositories = [
+  {
+    name     = "Nitros64/atlas-commerce"
+    owner_id = "50177640"
+    repo_id  = "1230706878"
+  },
+  {
+    name     = "luizgnz/atlas-commerce"
+    owner_id = "101154230"
+    repo_id  = "1323178047"
+  },
+]
+
+# Defaults in variables.tf already define bootstrap + alpha apply roles.
+# Override here only if you need to change trust or the approval gate.
+# environments = {
+#   bootstrap = { allowed_sub = "environment:bootstrap" }
+#   alpha = {
+#     allowed_sub             = "environment:alpha"
+#     require_deploy_approval = false
+#   }
+# }

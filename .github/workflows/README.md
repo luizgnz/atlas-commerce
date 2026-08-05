@@ -62,15 +62,15 @@ Set these under **Settings → Environments → alpha → Environment variables*
 |---|---|
 | `AWS_REGION` | `eu-central-1` |
 | `AWS_ACCOUNT_ID` | AWS account ID |
-| `AWS_ECR_PUSH_ROLE_ARN` | output `github_actions_ecr_push_role_arn` from `live/aws/alpha` |
+| `AWS_ECR_PUSH_ROLE_ARN` | output `github_actions_ecr_push_role_arn` from `01-aws` |
 | `ECR_REPOSITORY_PREFIX` | `atlas-commerce` |
-| `AWS_EKS_DEPLOY_ROLE_ARN` | output `github_actions_eks_deploy_role_arn` from `live/aws/alpha` |
-| `EKS_CLUSTER_NAME` | `atlas-commerce-alpha` (output `eks_cluster_name` from `live/aws/alpha`) |
-| `EXTERNAL_SECRETS_ROLE_ARN` | optional; output `external_secrets_role_arn` from `live/aws/alpha`. If unset, defaults to `arn:aws:iam::<account>:role/atlas-commerce-alpha-external-secrets-role` |
+| `AWS_EKS_DEPLOY_ROLE_ARN` | output `github_actions_eks_deploy_role_arn` from `01-aws` |
+| `EKS_CLUSTER_NAME` | `atlas-commerce-alpha` (output `eks_cluster_name` from `01-aws`) |
+| `EXTERNAL_SECRETS_ROLE_ARN` | optional; output `external_secrets_role_arn` from `01-aws`. If unset, defaults to `arn:aws:iam::<account>:role/atlas-commerce-alpha-external-secrets-role` |
 
 Before Helm, Deploy Services checks for External Secrets CRDs and **installs the operator** (Helm chart `external-secrets`) if they are missing.
 
-Apply `live/aws/alpha` after pulling the EKS deploy role / IAM OIDC trust updates so those outputs exist and `environment:alpha` is trusted, then set the Environment variables above.
+Apply `01-aws` after pulling the EKS deploy role / IAM OIDC trust updates so those outputs exist and `environment:alpha` is trusted, then set the Environment variables above.
 
 There is **no** approval gate on deploy in v1 (Environment `alpha` has no required reviewers for this path).
 
@@ -78,77 +78,44 @@ There is **no** approval gate on deploy in v1 (Environment `alpha` has no requir
 
 # Terraform GitHub Actions Workflows
 
-Deploys `platform/terraform/live/aws/*` with OIDC — no long-lived AWS credentials in GitHub. See `platform/terraform/bootstrap/gh-actions-oidc/README.md` for the IAM side.
+Source of truth lives next to the Terraform roots (symlinked into this folder):
 
-All Terraform entrypoints are **manual only** (`workflow_dispatch`), including bootstrap plan/validate workflows.
+- `platform/terraform/bootstrap/pipelines/`
+- `platform/terraform/01-aws/pipelines/`
 
-## Destroy Alpha (manual only)
-
-Manual workflow: [`.github/workflows/terraform-destroy-alpha.yml`](terraform-destroy-alpha.yml).
-
-Runs `terraform destroy` on `live/aws/alpha`. Requires:
-
-1. `confirm=destroy-alpha` on `workflow_dispatch`
-2. **Approve** Environment `alpha-destroy` (required reviewers)
-3. Then destroy (Environment `alpha` for OIDC): targeted apply to set ECR `force_delete = true`, then `terraform destroy`
-
-Non-empty ECR repos are removed via `force_delete` on `aws_ecr_repository` (no manual image purge). Deploy/apply keep using Environment `alpha` without reviewers.
-
-```bash
-gh workflow run terraform-destroy-alpha.yml --ref master -f confirm=destroy-alpha
-# then approve the pending deployment for Environment alpha-destroy
-```
-
-## Live Alpha (manual only)
-
-Manual workflow: [`.github/workflows/terraform-live-alpha.yml`](terraform-live-alpha.yml).
-
-Optional input **`deploy_services`** (default **false**): after a successful Terraform apply, also runs [Deploy Services](deploy-services.yml) for all services. Leave unchecked for infra-only.
-
-1. Actions → **Terraform - Live Alpha** → **Run workflow** (pick the branch), or:
-
-```bash
-gh workflow run terraform-live-alpha.yml --ref <branch>
-```
-
-The run uses the selected ref’s code. Plan + apply go through `reusable-terraform.yml` and GitHub Environment `alpha` (kept for OIDC `…:environment:alpha`). **Until alpha is functional, leave Environment `alpha` with no required reviewers** (Settings → Environments → alpha) and keep the AWS `deploy-approved` gate off for alpha (`require_deploy_approval = false` in `bootstrap/gh-actions-oidc`).
+OIDC / IAM: see `platform/terraform/bootstrap/README.md`. All Terraform entrypoints are **manual only** (`workflow_dispatch`).
 
 ## Workflows
 
-| File | Module | Apply? | Trigger |
-|---|---|---|---|
-| `terraform-bootstrap-aws-backend.yml` | `bootstrap/aws-backend` | No — applied by hand, uses local state | Manual only (`workflow_dispatch`) |
-| `terraform-bootstrap-gh-actions-oidc.yml` | `bootstrap/gh-actions-oidc` | No — applied by hand, security-sensitive | Manual only (`workflow_dispatch`) |
-| `terraform-live-alpha.yml` | `live/aws/alpha` | Yes (ungated while stacking up), any branch | Manual only (`workflow_dispatch`) |
+| File (symlink) | Root | Apply? |
+|---|---|---|
+| `terraform-bootstrap.yml` | `bootstrap/` | No — plan/validate only (local state) |
+| `terraform-apply.yml` | `01-aws/` | Yes — input `environment` (default `alpha`) |
+| `terraform-destroy.yml` | `01-aws/` | Yes — confirm `destroy-<env>` + Environment `<env>-destroy` |
+| `reusable-terraform.yml` | shared | `workflow_call` only |
 
-All three call the shared `reusable-terraform.yml`. `alpha` is currently the only live environment — it holds everything, including resources that would otherwise be split into a separate "shared" environment (e.g. the ECR repositories and their GitHub Actions push role). Add a `staging`/`prod` workflow the same way once those environments have real `.tf` files.
+```bash
+gh workflow run terraform-apply.yml --ref <branch> -f environment=alpha
+gh workflow run terraform-destroy.yml --ref master -f environment=alpha -f confirm=destroy-alpha
+```
 
-`alpha` is a disposable test environment: its apply job uses the GitHub Environment `alpha` (OIDC `sub` …`:environment:alpha`) and `require-master: false`, so apply can run from any branch when you dispatch the workflow. Approvals are temporarily off for alpha (no Environment reviewers; IAM deny gate disabled via `require_deploy_approval = false`). Re-enable both once the stack is functional. Any future `staging`/`prod` should keep approvals and a `master`-only restriction.
+`alpha` keep GitHub Environment reviewers empty and `require_deploy_approval = false` in bootstrap until the stack is functional.
 
 ## One-time setup
 
-1. Apply `bootstrap/aws-backend` by hand (already done — see its README).
-2. Apply `bootstrap/gh-actions-oidc` by hand (see its README) to create the OIDC provider and the `plan`/`apply-<env>` IAM roles.
-3. Keep `platform/terraform/environments.yml` up to date — Terraform plan/apply reads AWS account/region, state bucket, and plan/apply role ARNs from that file (not from GitHub repository Variables).
-4. Create a **GitHub Environment** per deployable Terraform env (`alpha`, and later `staging`/`prod`) under `Settings → Environments`:
-   - **alpha (temporary):** leave **required reviewers empty** so `workflow_dispatch` apply does not pause. Code cannot clear reviewers — do it in the GitHub UI if any are set.
-   - Later / staging/prod: add required reviewers when you want a human sign-off.
-   - Terraform apply uses the Environment for the OIDC `…:environment:<name>` claim; role ARNs still come from `environments.yml` via the reusable workflow `config` job.
-   - For service CI / Deploy Services (ECR push + Helm), set the Environment Variables listed in [Environment `alpha` Variables required](#environment-alpha-variables-required) above.
+1. Apply `platform/terraform/bootstrap` by hand (see its README).
+2. `./scripts/generate-backend-hcl.sh alpha` from bootstrap.
+3. Keep `platform/terraform/environments.yml` up to date.
+4. Create GitHub Environments (`alpha`, later `staging`/`prod`) and set Deploy Services variables from `01-aws` outputs.
 
-## Approving a real deploy (staging/prod, or alpha after re-enabling gates)
+## Approving a gated deploy
 
-When `require_deploy_approval = true` for an env, the apply IAM role denies every write until a human tags it. Open/close the AWS-side gate:
+When `require_deploy_approval = true`:
 
 ```bash
-cd platform/terraform/bootstrap/gh-actions-oidc
-./scripts/approve-deploy.sh <env>    # opens the AWS-side gate
-# … run / approve the apply job …
-./scripts/revoke-deploy.sh <env>     # closes the AWS-side gate again
+cd platform/terraform/bootstrap
+./scripts/approve-deploy.sh <env>
+# … run apply …
+./scripts/revoke-deploy.sh <env>
+./scripts/status-deploy.sh
 ```
-
-`./scripts/status-deploy.sh` shows which environments are currently open. **Alpha currently has this gate disabled in Terraform** (`require_deploy_approval = false`); re-apply `bootstrap/gh-actions-oidc` after flipping that flag to restore the deny policy. Until you re-apply, leaving `deploy-approved=true` on the alpha apply role also keeps writes allowed.
-
-## Why plan never needs approval
-
-The `plan` role only has `ReadOnlyAccess` and is assumable from any ref of this repo (scoped to `repo:Nitros64/atlas-commerce:*`). It cannot create, modify, or delete anything. Bootstrap and Live Alpha plan/apply only run when you dispatch the workflow.

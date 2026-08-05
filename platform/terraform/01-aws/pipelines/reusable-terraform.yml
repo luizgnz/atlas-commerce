@@ -1,0 +1,246 @@
+name: Reusable Terraform Plan/Apply
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        description: Logical environment key (alpha, bootstrap, ...). Matches the apply role suffix and the GitHub Environment name.
+        required: true
+        type: string
+      working-directory:
+        description: Path to the Terraform root module, relative to the repo root.
+        required: true
+        type: string
+      terraform-version:
+        required: false
+        type: string
+        default: '1.10.0'
+      apply-enabled:
+        description: |
+          Whether this module gets an automated apply job. Bootstrap stays false
+          (applied by hand). Product environments (alpha, ...) use true.
+        required: false
+        type: boolean
+        default: true
+      uses-remote-backend:
+        description: |
+          Whether to run terraform init -backend-config=backend.hcl.
+          False for bootstrap (local state; it creates the remote backend).
+        required: false
+        type: boolean
+        default: true
+      state-key:
+        description: |
+          S3 key for this module's state file, e.g. "atlas-commerce/alpha/terraform.tfstate".
+          Required when uses-remote-backend is true.
+        required: false
+        type: string
+        default: ''
+      require-master:
+        description: |
+          Whether the apply job requires github.ref to be refs/heads/master.
+          False for disposable envs (e.g. alpha).
+        required: false
+        type: boolean
+        default: true
+      var-file:
+        description: |
+          Optional -var-file path relative to working-directory
+          (e.g. envs/alpha.tfvars). Empty skips -var-file.
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  config:
+    name: Load config (${{ inputs.environment-name }})
+    runs-on: ubuntu-latest
+    outputs:
+      aws-region: ${{ steps.load.outputs.aws-region }}
+      aws-account-id: ${{ steps.load.outputs.aws-account-id }}
+      terraform-state-bucket: ${{ steps.load.outputs.terraform-state-bucket }}
+      terraform-plan-role-arn: ${{ steps.load.outputs.terraform-plan-role-arn }}
+      terraform-apply-role-arn: ${{ steps.load.outputs.terraform-apply-role-arn }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Load environment config
+        id: load
+        env:
+          ENV_KEY: ${{ inputs.environment-name }}
+        run: |
+          config_file=platform/terraform/environments.yml
+          get() { yq -r ".${ENV_KEY}.${1}" "${config_file}"; }
+
+          for field in awsRegion awsAccountId terraformStateBucket terraformPlanRoleArn terraformApplyRoleArn; do
+            value="$(get "${field}")"
+            if [ -z "${value}" ] || [ "${value}" = "null" ]; then
+              echo "::error::${config_file} has no '${field}' for environment '${ENV_KEY}'" >&2
+              exit 1
+            fi
+          done
+
+          {
+            echo "aws-region=$(get awsRegion)"
+            echo "aws-account-id=$(get awsAccountId)"
+            echo "terraform-state-bucket=$(get terraformStateBucket)"
+            echo "terraform-plan-role-arn=$(get terraformPlanRoleArn)"
+            echo "terraform-apply-role-arn=$(get terraformApplyRoleArn)"
+          } >> "$GITHUB_OUTPUT"
+
+  plan:
+    name: Plan (${{ inputs.environment-name }})
+    needs: config
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform-version }}
+
+      - name: Generate backend.hcl
+        if: inputs.uses-remote-backend
+        run: |
+          cat > backend.hcl <<EOF
+          bucket       = "${{ needs.config.outputs.terraform-state-bucket }}"
+          key          = "${{ inputs.state-key }}"
+          region       = "${{ needs.config.outputs.aws-region }}"
+          encrypt      = true
+          use_lockfile = true
+          EOF
+
+      - name: Configure AWS credentials (plan role, read-only)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ needs.config.outputs.aws-region }}
+          role-to-assume: ${{ needs.config.outputs.terraform-plan-role-arn }}
+          role-session-name: tf-plan-${{ inputs.environment-name }}-${{ github.run_id }}
+          allowed-account-ids: ${{ needs.config.outputs.aws-account-id }}
+
+      - name: Terraform Init (remote backend)
+        if: inputs.uses-remote-backend
+        run: terraform init -backend-config=backend.hcl
+
+      - name: Terraform Init (local backend)
+        if: ${{ !inputs.uses-remote-backend }}
+        run: terraform init
+
+      - name: Materialize terraform.tfvars for bootstrap CI
+        if: ${{ inputs.var-file == '' }}
+        run: |
+          if [ ! -f terraform.tfvars ] && [ -f terraform.tfvars.example ]; then
+            cp terraform.tfvars.example terraform.tfvars
+            echo "Using terraform.tfvars.example as terraform.tfvars"
+          fi
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        env:
+          TF_VAR_FILE: ${{ inputs.var-file }}
+        run: |
+          if [ -n "${TF_VAR_FILE}" ]; then
+            terraform plan -input=false -no-color -var-file="${TF_VAR_FILE}" -out=tfplan
+          else
+            terraform plan -input=false -no-color -out=tfplan
+          fi
+        continue-on-error: true
+
+      - name: Comment plan on pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Plan — \`${{ inputs.environment-name }}\`
+            \`\`\`
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            *Working directory: \`${{ inputs.working-directory }}\`*`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output,
+            });
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Upload plan artifact
+        if: inputs.apply-enabled && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment-name }}
+          path: ${{ inputs.working-directory }}/tfplan
+          retention-days: 1
+
+  apply:
+    name: Apply (${{ inputs.environment-name }})
+    needs: [config, plan]
+    if: >
+      inputs.apply-enabled
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (!inputs.require-master || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment-name }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform-version }}
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment-name }}
+          path: ${{ inputs.working-directory }}
+
+      - name: Generate backend.hcl
+        run: |
+          cat > backend.hcl <<EOF
+          bucket       = "${{ needs.config.outputs.terraform-state-bucket }}"
+          key          = "${{ inputs.state-key }}"
+          region       = "${{ needs.config.outputs.aws-region }}"
+          encrypt      = true
+          use_lockfile = true
+          EOF
+
+      - name: Configure AWS credentials (apply role)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ needs.config.outputs.aws-region }}
+          role-to-assume: ${{ needs.config.outputs.terraform-apply-role-arn }}
+          role-session-name: tf-apply-${{ inputs.environment-name }}-${{ github.run_id }}
+          allowed-account-ids: ${{ needs.config.outputs.aws-account-id }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config=backend.hcl
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan

@@ -1,0 +1,106 @@
+# Manual destroy of 01-aws/<environment>. Irreversible for that environment's AWS resources.
+name: Terraform - Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Product environment to destroy
+        type: string
+        default: alpha
+      confirm:
+        description: 'Type destroy-<environment> to confirm (e.g. destroy-alpha)'
+        required: true
+        type: string
+
+concurrency:
+  group: terraform-01-aws-destroy-${{ inputs.environment }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  gate:
+    name: Approval gate
+    if: inputs.confirm == format('destroy-{0}', inputs.environment)
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}-destroy
+    steps:
+      - name: Confirmed
+        run: echo "Destroy approved for ${{ inputs.environment }}."
+
+  destroy:
+    name: Destroy ${{ inputs.environment }}
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: platform/terraform/01-aws
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Load environment config
+        id: config
+        working-directory: ${{ github.workspace }}
+        env:
+          ENV_KEY: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          config_file=platform/terraform/environments.yml
+          get() { yq -r ".${ENV_KEY}.${1}" "${config_file}"; }
+          for field in awsRegion awsAccountId terraformStateBucket terraformApplyRoleArn; do
+            value="$(get "${field}")"
+            if [ -z "${value}" ] || [ "${value}" = "null" ]; then
+              echo "::error::${config_file} has no '${field}' for environment '${ENV_KEY}'" >&2
+              exit 1
+            fi
+          done
+          {
+            echo "aws-region=$(get awsRegion)"
+            echo "aws-account-id=$(get awsAccountId)"
+            echo "terraform-state-bucket=$(get terraformStateBucket)"
+            echo "terraform-apply-role-arn=$(get terraformApplyRoleArn)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.0'
+
+      - name: Generate backend.hcl
+        run: |
+          cat > backend.hcl <<EOF
+          bucket       = "${{ steps.config.outputs.terraform-state-bucket }}"
+          key          = "atlas-commerce/${{ inputs.environment }}/terraform.tfstate"
+          region       = "${{ steps.config.outputs.aws-region }}"
+          encrypt      = true
+          use_lockfile = true
+          EOF
+
+      - name: Configure AWS credentials (apply role)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ steps.config.outputs.aws-region }}
+          role-to-assume: ${{ steps.config.outputs.terraform-apply-role-arn }}
+          role-session-name: tf-destroy-${{ inputs.environment }}-${{ github.run_id }}
+          allowed-account-ids: ${{ steps.config.outputs.aws-account-id }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config=backend.hcl
+
+      - name: Enable ECR force_delete in state
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var-file=envs/${{ inputs.environment }}.tfvars \
+            -target=aws_ecr_repository.this
+
+      - name: Terraform Destroy
+        run: |
+          terraform destroy -input=false -auto-approve \
+            -var-file=envs/${{ inputs.environment }}.tfvars

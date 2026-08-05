@@ -1,9 +1,9 @@
 # GitHub Actions Setup — Atlas Commerce Terraform
 
 Manual, one-time steps to finish wiring GitHub Actions to AWS after applying
-`bootstrap/aws-backend` and `bootstrap/gh-actions-oidc`. Both bootstrap
-modules are already applied against AWS account `553337000139`
-(`eu-central-1`).
+`platform/terraform/bootstrap` (unified root: state bucket + GitHub OIDC).
+Re-apply bootstrap if the account was wiped; then refresh
+[`environments.yml`](../environments.yml) from its outputs.
 
 ## 1. Environment config
 
@@ -17,7 +17,7 @@ update that file if any of these values ever change (e.g. after rotating a
 role or recreating the state bucket).
 
 Add `staging`/`prod` by adding a new top-level key to `environments.yml`
-plus a matching key in `bootstrap/gh-actions-oidc/variables.tf`'s
+plus a matching key in `bootstrap/variables.tf`'s
 `environments` map (and applying that module again) — no workflow file
 needs to change.
 
@@ -40,7 +40,7 @@ push role live inside `alpha` too.
   environment, its AWS-side trust policy already allows any branch
   (`require-master: false` in `terraform-live-alpha.yml`).
 - AWS IAM deny-until-approved gate is off for alpha
-  (`require_deploy_approval = false` in `bootstrap/gh-actions-oidc`).
+  (`require_deploy_approval = false` in `bootstrap`).
 
 Add `staging`/`prod` the same way once those environments have real `.tf`
 files and their own entry in `environments.yml` (with approvals enabled).

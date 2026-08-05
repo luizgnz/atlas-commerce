@@ -1,0 +1,54 @@
+name: Terraform - Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Product environment (must match envs/<name>.tfvars and GitHub Environment)
+        type: string
+        default: alpha
+      deploy_services:
+        description: After Terraform apply, also build and deploy all application services
+        type: boolean
+        default: false
+
+concurrency:
+  group: terraform-01-aws-${{ inputs.environment }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  security-events: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  terraform:
+    name: Terraform
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment-name: ${{ inputs.environment }}
+      working-directory: platform/terraform/01-aws
+      state-key: atlas-commerce/${{ inputs.environment }}/terraform.tfstate
+      var-file: envs/${{ inputs.environment }}.tfvars
+      require-master: false
+
+  deploy-services:
+    name: Deploy Services
+    needs: terraform
+    if: ${{ inputs.deploy_services }}
+    uses: ./.github/workflows/deploy-services.yml
+    with:
+      auth: true
+      catalog: true
+      cart: true
+      pricing: true
+      coupon: true
+      inventory: true
+      payment: true
+      order: true
+      shipping: true
+      notification: true
+      audit: true
+      gateway: true

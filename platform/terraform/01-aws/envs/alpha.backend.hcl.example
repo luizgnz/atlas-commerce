@@ -1,0 +1,20 @@
+# Template for envs/alpha.backend.hcl (not committed — generate it, don't
+# hand-type it, so it always points at the current AWS account's state
+# bucket).
+#
+# Generate it from ../../bootstrap/aws-backend:
+#
+#   cd platform/terraform/bootstrap/aws-backend
+#   terraform output -raw backend_config_template \
+#     | sed 's#<ENV>#alpha#' > ../../01-aws/envs/alpha.backend.hcl
+#
+# Then run:
+#
+#   terraform -chdir=platform/terraform/01-aws init \
+#     -backend-config=envs/alpha.backend.hcl
+
+bucket       = "<TERRAFORM_STATE_BUCKET_NAME>"
+key          = "atlas-commerce/alpha/terraform.tfstate"
+region       = "eu-central-1"
+encrypt      = true
+use_lockfile = true
